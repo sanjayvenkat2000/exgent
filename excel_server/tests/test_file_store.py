@@ -1,20 +1,26 @@
+import shutil
+from pathlib import Path
+
 import pytest
 from app.file_store.file_store import FileStore, LocalFileStoreBackend
 
 
 # Fixture for temporary storage path
 @pytest.fixture
-def temp_storage_path(tmp_path):
-    storage_dir = tmp_path / "file_storage"
-    storage_dir.mkdir()
+def temp_storage_path():
+    storage_dir = Path("/tmp/storage")
+    if storage_dir.exists():
+        shutil.rmtree(storage_dir)
+    storage_dir.mkdir(parents=True, exist_ok=True)
     return str(storage_dir)
 
 
 # Fixture for FileStore instance
 @pytest.fixture
 def file_store(temp_storage_path):
-    # Use in-memory SQLite for testing
-    db_url = "sqlite:///:memory:"
+    # Use file-based SQLite in /tmp/storage
+    db_path = Path(temp_storage_path) / "file_store.db"
+    db_url = f"sqlite:///{db_path}"
     backend = LocalFileStoreBackend(base_path=temp_storage_path)
 
     # Simple auth callback that allows everything
@@ -83,7 +89,8 @@ def test_delete_file(file_store):
 
 
 def test_auth_callback_denial(temp_storage_path):
-    db_url = "sqlite:///:memory:"
+    db_path = Path(temp_storage_path) / "file_store_denial.db"
+    db_url = f"sqlite:///{db_path}"
     backend = LocalFileStoreBackend(base_path=temp_storage_path)
 
     # Deny all

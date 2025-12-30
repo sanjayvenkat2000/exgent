@@ -1,11 +1,24 @@
+import shutil
+from pathlib import Path
+
 import pytest
 from app.file_extract_store.file_extract_store import FileExtractStore
 
 
 @pytest.fixture
-def file_extract_store():
-    # Use in-memory SQLite for testing
-    db_url = "sqlite:///:memory:"
+def temp_storage_path():
+    storage_dir = Path("/tmp/storage")
+    if storage_dir.exists():
+        shutil.rmtree(storage_dir)
+    storage_dir.mkdir(parents=True, exist_ok=True)
+    return str(storage_dir)
+
+
+@pytest.fixture
+def file_extract_store(temp_storage_path):
+    # Use file-based SQLite in /tmp/storage
+    db_path = Path(temp_storage_path) / "file_extract_store.db"
+    db_url = f"sqlite:///{db_path}"
 
     # Simple auth callback that allows everything
     def auth_callback(user_id, action, file_id=None):
