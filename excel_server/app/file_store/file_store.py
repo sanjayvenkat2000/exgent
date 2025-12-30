@@ -5,21 +5,10 @@ from pathlib import Path
 from typing import Callable, List, Optional
 from uuid import uuid4
 
-from pydantic import BaseModel
 from sqlalchemy import Boolean, DateTime, String, create_engine, select
 from sqlalchemy.orm import Mapped, declarative_base, mapped_column, sessionmaker
 
-
-# Keep the existing Pydantic model
-class UserFile(BaseModel):
-    file_id: str
-    original_filename: str
-    user_id: str
-    file_uri: str
-    create_date: datetime
-    update_date: datetime
-    is_deleted: bool
-
+from app.domain import UserFile
 
 # SQLAlchemy Base
 Base = declarative_base()

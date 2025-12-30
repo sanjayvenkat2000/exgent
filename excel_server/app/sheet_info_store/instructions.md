@@ -1,7 +1,7 @@
-### File Extract Store
-A File Extract store maintains a versioned store that save the outputs for a specific sheet. Remember we are processing Excel files in this workflow and Excel files have 1 or more sheets.
+### Sheet Info Store
+A Sheet Info store maintains a versioned store that save the outputs for a specific sheet. Remember we are processing Excel files in this workflow and Excel files have 1 or more sheets.
 
-The file extract store stores its payload (JSON) as a string in the database.
+The sheet info store stores its payload (JSON) as a string in the database.
 
 The db schema for the table `file_info` is as follows
 class FileInfo(BaseModel):
@@ -13,7 +13,7 @@ class FileInfo(BaseModel):
     version: int
     create_time: datetime
 
-The file extract store will be implemented using SQLAlchemey.
+The sheet info store will be implemented using SQLAlchemey.
 
 Requirements
 1. The file_info is an append only table and increments its version when a data is added. Consider opportunistic locking to make sure we get all updates and no version conflict.

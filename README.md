@@ -45,9 +45,9 @@ The file store is responsible for maintaining a record of a user's files. The fi
   3. `local_fs` storage backend is the default implementation. This is not suitable for production. For production use you need to consider block storage for your containers and make sure the file is not stored on ephemeral disks.
   4. The db table schema is described in excel_server/file_store/instructions.md
 
-#### File Extraction Store
-The file extraction store is responsible for maintaining the most upto-date information required to extract financial statement into their **internal ontology** 
-  1. The db table schema is described in excel_server/file_extract_store/instruction.md 
+#### Sheet Info Store
+The sheet info store is responsible for maintaining the most upto-date information required to extract financial statement and mapping to their **internal ontology** 
+  1. The db table schema is described in excel_server/sheet_info_store/instruction.md 
 
 #### Session Store
 The session store records the state of an AI chat or processing step. The session store records all the events involved in a multi-step AI workflow. 

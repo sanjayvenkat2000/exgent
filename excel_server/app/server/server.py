@@ -4,8 +4,9 @@ from contextlib import asynccontextmanager
 from typing import List, Optional
 
 import uvicorn
-from app.file_extract_store.file_extract_store import FileExtractInfo, FileExtractStore
-from app.file_store.file_store import FileStore, LocalFileStoreBackend, UserFile
+from app.domain import FileExtractInfo, UserFile
+from app.file_store.file_store import FileStore, LocalFileStoreBackend
+from app.sheet_info_store.sheet_info_store import SheetInfoStore
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from openpyxl import load_workbook
@@ -18,7 +19,7 @@ if BASE_STORAGE_DIR is None:
 
 # --- Dependencies ---
 file_store: Optional[FileStore] = None
-file_extract_store: Optional[FileExtractStore] = None
+sheet_info_store: Optional[SheetInfoStore] = None
 
 
 @asynccontextmanager
@@ -52,7 +53,7 @@ async def lifespan(app: FastAPI):
     # Ensure directories exist
     os.makedirs(os.path.dirname(fes_db_path), exist_ok=True)
 
-    file_extract_store = FileExtractStore(db_url=f"sqlite:///{fes_db_path}")
+    sheet_info_store = SheetInfoStore(db_url=f"sqlite:///{fes_db_path}")
 
     yield
 
@@ -80,7 +81,6 @@ class ExtractUpdate(BaseModel):
 
 
 class SheetInfo(BaseModel):
-    sheet_idx: int
     sheet_name: str
     extract: Optional[FileExtractInfo] = None
 
@@ -102,10 +102,10 @@ def get_file_store() -> FileStore:
     return file_store
 
 
-def get_file_extract_store() -> FileExtractStore:
-    if file_extract_store is None:
-        raise HTTPException(status_code=500, detail="FileExtractStore not initialized")
-    return file_extract_store
+def get_sheet_info_store() -> SheetInfoStore:
+    if sheet_info_store is None:
+        raise HTTPException(status_code=500, detail="SheetInfoStore not initialized")
+    return sheet_info_store
 
 
 # --- Routes ---
@@ -128,7 +128,7 @@ def get_file_details(
     file_id: str,
     user_id: str = Depends(get_user_id),
     f_store: FileStore = Depends(get_file_store),
-    fe_store: FileExtractStore = Depends(get_file_extract_store),
+    fe_store: SheetInfoStore = Depends(get_sheet_info_store),
 ):
     try:
         # Get file metadata and content
@@ -149,7 +149,7 @@ def get_file_details(
         for idx, name in enumerate(sheet_names):
             # Get latest extract for this sheet
             extract = fe_store.get_latest(user_id, file_id, idx)
-            sheets.append(SheetInfo(sheet_idx=idx, sheet_name=name, extract=extract))
+            sheets.append(SheetInfo(sheet_name=name, extract=extract))
 
         return FileDetailResponse(**user_file.model_dump(), sheets=sheets)
 
@@ -179,7 +179,7 @@ def analyze_file_sheet(
     sheet_idx: int,
     user_id: str = Depends(get_user_id),
     f_store: FileStore = Depends(get_file_store),
-    fe_store: FileExtractStore = Depends(get_file_extract_store),
+    fe_store: SheetInfoStore = Depends(get_sheet_info_store),
 ):
     # Check if file exists
     try:
@@ -201,10 +201,10 @@ def update_extract(
     sheet_idx: int,
     update: ExtractUpdate,
     user_id: str = Depends(get_user_id),
-    fe_store: FileExtractStore = Depends(get_file_extract_store),
+    fe_store: SheetInfoStore = Depends(get_sheet_info_store),
 ):
     try:
-        return fe_store.add_extract(user_id, file_id, sheet_idx, update.payload)
+        return fe_store.add_sheet_info(user_id, file_id, sheet_idx, update.payload)
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
     except Exception as e:
