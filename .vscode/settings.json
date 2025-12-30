@@ -1,0 +1,13 @@
+{
+    "editor.formatOnSave": true,
+    "[typescript]": {
+        "editor.defaultFormatter": "vscode.typescript-language-features"
+    },
+    "[typescriptreact]": {
+        "editor.defaultFormatter": "vscode.typescript-language-features"
+    },
+    "python.defaultInterpreterPath": "excel_server/.venv/bin/python",
+    "eslint.workingDirectories": [
+        "./excel_client"
+    ]
+}
