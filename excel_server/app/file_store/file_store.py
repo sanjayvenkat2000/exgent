@@ -96,11 +96,11 @@ class FileStore:
         self,
         db_url: str,
         backend: StorageBackend,
-        auth_callback: Optional[Callable[[str, str, str], bool]] = None,
+        auth_callback: Optional[Callable[[str, str, Optional[str]], bool]] = None,
     ):
         """
         auth_callback signature: (user_id: str, action: str, file_id: Optional[str]) -> bool
-        actions: 'create', 'read', 'update', 'delete', 'list'
+        actions: 'create', 'read', 'delete', 'list'
         """
         self.engine = create_engine(db_url)
         Base.metadata.create_all(self.engine)
@@ -110,17 +110,20 @@ class FileStore:
         self.backend = backend
         self.auth_callback = auth_callback
 
-    def _check_auth(self, user_id: str, action: str, file_id: Optional[str] = None):
+    def _check_auth(
+        self, user_id: str, action: str, file_id: Optional[str] = None
+    ) -> bool:
         if self.auth_callback:
             if not self.auth_callback(user_id, action, file_id):
-                raise PermissionError(
-                    f"User {user_id} not authorized to {action} file {file_id}"
-                )
+                return False
+        return True
 
     def create_file(self, user_id: str, filename: str, content: bytes) -> UserFile:
-        self._check_auth(user_id, "create")
-
         file_id = str(uuid4())
+        if not self._check_auth(user_id, "create", file_id):
+            raise PermissionError(
+                f"User {user_id} not authorized to create file {file_id}"
+            )
 
         # Save to backend
         file_uri = self.backend.save(file_id, content)
@@ -150,12 +153,6 @@ class FileStore:
             if not db_file or db_file.is_deleted:
                 raise FileNotFoundError(f"File {file_id} not found")
 
-            # Additional check: Does the file belong to the user?
-            # The instructions imply RBAC via auth_callback, but typically ownership is checked too.
-            # I'll rely on auth_callback or assume broad access if auth_callback passes.
-            # But usually basic ownership check is good.
-            # If auth_callback is provided, we assume it handles ownership/permission checks.
-
             content = self.backend.read(db_file.file_uri)
             return db_file.to_pydantic(), content
 
@@ -180,10 +177,6 @@ class FileStore:
             session.commit()
             session.refresh(db_file)
 
-            # Optionally delete from backend or keep for retention
-            # Instructions say "is_deleted: boolean", implying soft delete.
-            # I will not remove from backend immediately based on standard soft-delete patterns.
-
             return db_file.to_pydantic()
 
     def list_files(self, user_id: str) -> List[UserFile]:
@@ -192,7 +185,8 @@ class FileStore:
         with self.SessionLocal() as session:
             # Listing files for the user
             stmt = select(UserFileModel).where(
-                UserFileModel.user_id == user_id, UserFileModel.is_deleted == False
+                UserFileModel.user_id == user_id,
+                UserFileModel.is_deleted == False,  # noqa: E712
             )
             results = session.execute(stmt).scalars().all()
             return [f.to_pydantic() for f in results]
