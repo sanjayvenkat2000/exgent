@@ -112,23 +112,17 @@ class FileStore:
 
     def _check_auth(
         self, user_id: str, action: str, file_id: Optional[str] = None
-    ) -> bool:
+    ) -> None:
         if self.auth_callback:
             if not self.auth_callback(user_id, action, file_id):
-                return False
-        return True
+                raise PermissionError(
+                    f"User {user_id} not authorized to {action} file {file_id}"
+                )
 
     def create_file(self, user_id: str, filename: str, content: bytes) -> UserFile:
         file_id = str(uuid4())
-        if not self._check_auth(user_id, "create", file_id):
-            raise PermissionError(
-                f"User {user_id} not authorized to create file {file_id}"
-            )
-
-        # Save to backend
+        self._check_auth(user_id, "create", file_id)
         file_uri = self.backend.save(file_id, content)
-
-        # Save metadata
         db_file = UserFileModel(
             file_id=file_id,
             original_filename=filename,
@@ -147,7 +141,6 @@ class FileStore:
 
     def get_file(self, user_id: str, file_id: str) -> tuple[UserFile, bytes]:
         self._check_auth(user_id, "read", file_id)
-
         with self.SessionLocal() as session:
             db_file = session.get(UserFileModel, file_id)
             if not db_file or db_file.is_deleted:
@@ -157,7 +150,6 @@ class FileStore:
             return db_file.to_pydantic(), content
 
     def get_file_metadata(self, user_id: str, file_id: str) -> UserFile:
-        self._check_auth(user_id, "read_metadata", file_id)
         with self.SessionLocal() as session:
             db_file = session.get(UserFileModel, file_id)
             if not db_file or db_file.is_deleted:
