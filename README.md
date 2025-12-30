@@ -22,13 +22,44 @@ The agent is built with the Google ADK toolkit server using a Fast API applicati
   1. /files (GET) : Lists the files a user uploads.
   2. /files/{file_id} (GET):  Gets the files details for display ( an excel file has multiple sheets so this data is passed back ). All meta-data from processing the file are also returned in this call.
   3. /files/{file_id} (POST): Update the file meta-data from the UI.  This endpoint provides the human in the loop functionality that is required for this usecase.
+  4. /files/{file_id} (DELETE): Removes the file from the listing of files. The original file is not deleted from the system.
+  5. /analyze/{file_id}/{sheet_idx} (POST): Invokes the AI workflow to process the sheets data.
+  6. /update/{file_id}/{sheet_idx} (POST): 
+
+* The agent itself is exposed to the application using the Google A2A protocol.
+  1. Allows our agent to join an eco-system of agents if required.
+  2. Provides to authentication that is built into the protocol and not slapped on later like MCP.
+  3. Negatives - the google A2A agent is a self standing JSON RPC endpoint and will run out-of-process from the server. Not required, but cleaner.
  
 * The client provides the following functions
   1. Allows the user to list their files.
   2. Allows the user to view the details of their excel files.
-  3. Allows the user to review the AI's output and correct it as necessary.
+  3. Allows the user to chat with the AI about extracting financial information from the excel sheet interactively and make the necessary corrections.
 
 ### Implementation Details
+
+#### File Store
+The file store is responsible for maintaining a record of a user's files. The file store must be an interface that supports various storage backends. Supported backends will include s3 and local file store.
+  1. The file store uses a postgres database to maintain access control to the storage backends. The schema contains a table called `user_files`.
+  2. The file store interface must support basic CRUD operations on files. The file store must provide an authorization callback to make sure the user is allowed to perform the required action on the file.
+  3. `local_fs` storage backend is the default implementation. This is not suitable for production. For production use you need to consider block storage for your containers and make sure the file is not stored on ephemeral disks.
+  4. **TODO**: Describe the db table schema here...
+
+### File Extraction Store
+The file extraction store is responsible for maintaining the most upto-date information required to extract financial statement into their **internal ontology** 
+  1. **TODO**: Describe the db table schema here... 
+
+#### Session Store
+The session store records the state of an AI chat or processing step. The session store records all the events involved in a multi-step AI workflow. 
+  1. The session store uses a postgres database to maintain AI chat history, tool call history, and intermediate states generated during the AI workflow.
+  2. The session store implementation will be handled by Google ADK (any Agent framework should provide similar implementations).
+
+#### Server Implementation
+1. The server is implemented using FastAPI.
+2. The server starts up on port 8080.
+3. Make sure you add CORS headers.
+4. All routes implemented must inject a dependency that obtains the user_id. Dummy function for now that returns a fixed id `user_one`. 
+
 
 
 
