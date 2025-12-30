@@ -12,7 +12,9 @@ from openpyxl import load_workbook
 from pydantic import BaseModel
 
 # --- Configuration ---
-BASE_STORAGE_DIR = os.getenv("base_storage_dir", "./storage")
+BASE_STORAGE_DIR = os.getenv("base_storage_dir")
+if BASE_STORAGE_DIR is None:
+    raise ValueError("base_storage_dir environment variable is not set")
 
 # --- Dependencies ---
 file_store: Optional[FileStore] = None
@@ -24,11 +26,18 @@ async def lifespan(app: FastAPI):
     global file_store, file_extract_store
 
     # Initialize FileStore
+    if not BASE_STORAGE_DIR:
+        raise ValueError("base_storage_dir environment variable is not set")
+
+    if not os.path.exists(BASE_STORAGE_DIR):
+        os.makedirs(BASE_STORAGE_DIR, exist_ok=True)
+
     fs_db_path = os.path.join(BASE_STORAGE_DIR, "file_store", "file_store_db.sqllite")
     fs_files_path = os.path.join(BASE_STORAGE_DIR, "file_store", "files")
 
     # Ensure directories exist
     os.makedirs(os.path.dirname(fs_db_path), exist_ok=True)
+    os.makedirs(os.path.dirname(fs_files_path), exist_ok=True)
 
     file_store = FileStore(
         db_url=f"sqlite:///{fs_db_path}",
