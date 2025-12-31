@@ -4,15 +4,18 @@ from contextlib import asynccontextmanager
 from typing import List, Optional
 
 import uvicorn
-from app.domain import FileExtractInfo, UserFile
+from app.domain import SheetInfo, SheetInfoPayload, UserFile
 from app.file_store.file_store import FileStore, LocalFileStoreBackend
 from app.sheet_info_store.sheet_info_store import SheetInfoStore
+from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from openpyxl import load_workbook
 from pydantic import BaseModel
 
 # --- Configuration ---
+load_dotenv()
+
 BASE_STORAGE_DIR = os.getenv("base_storage_dir")
 if BASE_STORAGE_DIR is None:
     raise ValueError("base_storage_dir environment variable is not set")
@@ -80,11 +83,6 @@ class ExtractUpdate(BaseModel):
     payload: str
 
 
-class SheetInfo(BaseModel):
-    sheet_name: str
-    extract: Optional[FileExtractInfo] = None
-
-
 class FileDetailResponse(UserFile):
     sheets: List[SheetInfo]
 
@@ -149,7 +147,16 @@ def get_file_details(
         for idx, name in enumerate(sheet_names):
             # Get latest extract for this sheet
             extract = fe_store.get_latest(user_id, file_id, idx)
-            sheets.append(SheetInfo(sheet_name=name, extract=extract))
+            sheets.append(
+                SheetInfo(
+                    user_id=user_id,
+                    file_id=file_id,
+                    sheet_idx=idx,
+                    sheet_name=name,
+                    payload=extract.payload if extract is not None else None,
+                    version=extract.version if extract is not None else 0,
+                )
+            )
 
         return FileDetailResponse(**user_file.model_dump(), sheets=sheets)
 
@@ -195,16 +202,23 @@ def analyze_file_sheet(
     return {"message": "Analysis started", "file_id": file_id, "sheet_idx": sheet_idx}
 
 
-@app.post("/update/{file_id}/{sheet_idx}", response_model=FileExtractInfo)
-def update_extract(
+class UpdateSheetInfoRequest(BaseModel):
+    sheet_name: str
+    payload: Optional[SheetInfoPayload] = None
+
+
+@app.post("/update/{file_id}/{sheet_idx}", response_model=SheetInfo)
+def update_sheet_info(
     file_id: str,
     sheet_idx: int,
-    update: ExtractUpdate,
+    request: UpdateSheetInfoRequest,
     user_id: str = Depends(get_user_id),
     fe_store: SheetInfoStore = Depends(get_sheet_info_store),
 ):
     try:
-        return fe_store.add_sheet_info(user_id, file_id, sheet_idx, update.payload)
+        sheet_name = request.sheet_name
+        payload = request.payload
+        return fe_store.add_sheet_info(user_id, file_id, sheet_idx, sheet_name, payload)
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
     except Exception as e:

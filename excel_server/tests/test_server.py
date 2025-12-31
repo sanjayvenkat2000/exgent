@@ -3,9 +3,15 @@ import shutil
 from pathlib import Path
 
 import pytest
-from app.file_extract_store.file_extract_store import FileExtractStore
+from app.domain import SheetInfoPayload, SheetStructure
 from app.file_store.file_store import FileStore, LocalFileStoreBackend
-from app.server.server import app, get_file_extract_store, get_file_store
+from app.server.server import (
+    UpdateSheetInfoRequest,
+    app,
+    get_file_store,
+    get_sheet_info_store,
+)
+from app.sheet_info_store.sheet_info_store import SheetInfoStore
 from fastapi.testclient import TestClient
 
 # --- Fixtures ---
@@ -41,9 +47,9 @@ def test_file_store(temp_storage_path):
 @pytest.fixture
 def test_file_extract_store(temp_storage_path):
     # Use file-based SQLite in /tmp/storage
-    db_path = Path(temp_storage_path) / "file_extract_store_server.db"
+    db_path = Path(temp_storage_path) / "sheet_info_store_server.db"
     db_url = f"sqlite:///{db_path}"
-    store = FileExtractStore(db_url=db_url)
+    store = SheetInfoStore(db_url=db_url)
     return store
 
 
@@ -51,7 +57,7 @@ def test_file_extract_store(temp_storage_path):
 def client(test_file_store, test_file_extract_store):
     # Override dependencies
     app.dependency_overrides[get_file_store] = lambda: test_file_store
-    app.dependency_overrides[get_file_extract_store] = lambda: test_file_extract_store
+    app.dependency_overrides[get_sheet_info_store] = lambda: test_file_extract_store
 
     with TestClient(app) as c:
         yield c
@@ -212,10 +218,22 @@ def test_update_extract(client, sample_xlsx_path):
     file_id = upload_resp.json()["file_id"]
 
     # Update extract for sheet 0
-    payload = "Updated extract content"
-    response = client.post(f"/update/{file_id}/0", json={"payload": payload})
+    payload = SheetInfoPayload(
+        structure=SheetStructure(
+            statement_type="test",
+            financial_items_column=1,
+            date_columns=[2],
+            groups=[],
+        ),
+        tags=[],
+    )
+    request = UpdateSheetInfoRequest(sheet_name="sheet1", payload=payload)
+
+    response = client.post(f"/update/{file_id}/0", json=request.model_dump())
     assert response.status_code == 200
     data = response.json()
-    assert data["payload"] == payload
+    # assert SheetInfoPayload.model_validate_json(data["payload"]) == payload
+    sheet_info_payload = SheetInfoPayload.model_validate(data["payload"])
+    assert sheet_info_payload == payload
     assert data["file_id"] == file_id
     assert data["sheet_idx"] == 0

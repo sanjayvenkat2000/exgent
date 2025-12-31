@@ -2,7 +2,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Callable, List, Optional
 
-from app.domain import SheetInfo
+from app.domain import SheetInfo, SheetInfoPayload
 from sqlalchemy import (
     DateTime,
     Integer,
@@ -30,16 +30,20 @@ class SheetInfoModel(Base):
     user_id: Mapped[str] = mapped_column(String, primary_key=True)
 
     sheet_name: Mapped[str] = mapped_column(String)
-    payload: Mapped[str] = mapped_column(Text)
+    payload: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     updated_by: Mapped[str] = mapped_column(String)
     create_time: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     def to_pydantic(self) -> SheetInfo:
+        if self.payload is not None:
+            payload = SheetInfoPayload.model_validate_json(self.payload)
+        else:
+            payload = None
         return SheetInfo(
             user_id=self.user_id,
             file_id=self.file_id,
             sheet_idx=self.sheet_idx,
-            payload=self.payload,
+            payload=payload,
             sheet_name=self.sheet_name,
             version=self.version,
         )
@@ -68,7 +72,12 @@ class SheetInfoStore:
                 )
 
     def add_sheet_info(
-        self, user_id: str, file_id: str, sheet_idx: int, sheet_name: str, payload: str
+        self,
+        user_id: str,
+        file_id: str,
+        sheet_idx: int,
+        sheet_name: str,
+        payload: Optional[SheetInfoPayload] = None,
     ) -> SheetInfo:
         # Check update permission on the file
         self._check_auth(user_id, "update", file_id)
@@ -87,7 +96,7 @@ class SheetInfoStore:
                 file_id=file_id,
                 sheet_idx=sheet_idx,
                 sheet_name=sheet_name,
-                payload=payload,
+                payload=payload.model_dump_json() if payload is not None else None,
                 updated_by=user_id,
                 version=new_version,
                 create_time=datetime.now(timezone.utc),

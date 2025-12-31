@@ -1,29 +1,7 @@
 from datetime import datetime
+from typing import Optional
 
 from pydantic import BaseModel, Field
-
-
-########################################################
-# Database Storage Models
-########################################################
-class UserFile(BaseModel):
-    file_id: str
-    original_filename: str
-    user_id: str
-    file_uri: str
-    create_date: datetime
-    update_date: datetime
-    is_deleted: bool
-
-
-class SheetInfo(BaseModel):
-    user_id: str = Field(description="The user who uploaded the file")
-    file_id: str
-    payload: str = Field(description="The JSON payload of the sheet info")
-    sheet_name: str
-    sheet_idx: int
-    version: int
-
 
 ########################################################
 # Server Models
@@ -52,3 +30,25 @@ class SheetTag(BaseModel):
 class SheetInfoPayload(BaseModel):
     structure: SheetStructure
     tags: list[SheetTag]
+
+
+########################################################
+# Database Storage Models
+########################################################
+class UserFile(BaseModel):
+    file_id: str
+    original_filename: str
+    user_id: str
+    file_uri: str
+    create_date: datetime
+    update_date: datetime
+    is_deleted: bool
+
+
+class SheetInfo(BaseModel):
+    user_id: str = Field(description="The user who uploaded the file")
+    file_id: str
+    payload: Optional[SheetInfoPayload] = None
+    sheet_name: str
+    sheet_idx: int
+    version: int
