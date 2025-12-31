@@ -1,3 +1,6 @@
+import csv
+import io
+import json
 import os
 from contextlib import asynccontextmanager
 from typing import List, Optional
@@ -10,12 +13,22 @@ from app.domain import (
     SheetInfoPayload,
     UserFile,
 )
+from app.exgent.agent import excel_tag_agent
 from app.file_store.file_store import FileStore, LocalFileStoreBackend
 from app.server.excel_utils import convert_excel_to_sheet_data
 from app.sheet_info_store.sheet_info_store import SheetInfoStore
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+from google.adk.agents.run_config import RunConfig, StreamingMode
+from google.adk.apps.app import App
+from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
+from google.adk.memory.in_memory_memory_service import InMemoryMemoryService
+from google.adk.runners import Runner
+from google.adk.sessions.database_session_service import DatabaseSessionService
+from google.adk.utils.context_utils import Aclosing
+from google.genai.types import Content, Part
 from pydantic import BaseModel
 
 # --- Configuration ---
@@ -28,11 +41,13 @@ if BASE_STORAGE_DIR is None:
 # --- Dependencies ---
 file_store: Optional[FileStore] = None
 sheet_info_store: Optional[SheetInfoStore] = None
+runner: Optional[Runner] = None
+session_service: Optional[DatabaseSessionService] = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global file_store, sheet_info_store
+    global file_store, sheet_info_store, session_service, adk_runner
 
     # Initialize FileStore
     if not BASE_STORAGE_DIR:
@@ -60,8 +75,32 @@ async def lifespan(app: FastAPI):
 
     # Ensure directories exist
     os.makedirs(os.path.dirname(fes_db_path), exist_ok=True)
-
     sheet_info_store = SheetInfoStore(db_url=f"sqlite:///{fes_db_path}")
+
+    # Initialize SessionService
+    session_db_path = os.path.join(
+        BASE_STORAGE_DIR, "session_store", "session_store_db.sqllite"
+    )
+    os.makedirs(os.path.dirname(session_db_path), exist_ok=True)
+    session_service = DatabaseSessionService(db_url=f"sqlite:///{session_db_path}")
+
+    memory_service = InMemoryMemoryService()
+    artifact_service = InMemoryArtifactService()
+
+    # 1. Wrap the pre-loaded agent in an App instance
+    # This replicates the 'if isinstance(agent_or_app, BaseAgent):' block
+    agentic_app = App(
+        name="excel_tag",
+        root_agent=excel_tag_agent,
+        plugins=[],  # You can add any necessary plugins here
+    )
+
+    adk_runner = Runner(
+        app=agentic_app,
+        artifact_service=artifact_service,
+        session_service=session_service,
+        memory_service=memory_service,
+    )
 
     yield
 
@@ -101,6 +140,18 @@ def get_sheet_info_store() -> SheetInfoStore:
     if sheet_info_store is None:
         raise HTTPException(status_code=500, detail="SheetInfoStore not initialized")
     return sheet_info_store
+
+
+def get_runner() -> Runner:
+    if adk_runner is None:
+        raise HTTPException(status_code=500, detail="Runner not initialized")
+    return adk_runner
+
+
+def get_session_service() -> DatabaseSessionService:
+    if session_service is None:
+        raise HTTPException(status_code=500, detail="SessionService not initialized")
+    return session_service
 
 
 # --- Routes ---
@@ -172,26 +223,83 @@ def delete_file(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def list_to_csv_string(data: list[list[str]]) -> str:
+    # 1. Create an in-memory text buffer
+    output = io.StringIO()
+
+    # 2. Initialize the writer
+    # lineterminator='\n' ensures consistent line endings across OS platforms
+    writer = csv.writer(output, quoting=csv.QUOTE_NONNUMERIC, lineterminator="\n")
+
+    # 3. Write all rows
+    writer.writerows(data)
+
+    # 4. Retrieve the string and return it
+    return output.getvalue()
+
+
 @app.post("/analyze/{file_id}/{sheet_idx}")
-def analyze_file_sheet(
+async def analyze_file_sheet(
     file_id: str,
     sheet_idx: int,
     user_id: str = Depends(get_user_id),
     f_store: FileStore = Depends(get_file_store),
     fe_store: SheetInfoStore = Depends(get_sheet_info_store),
-):
+    runner: Runner = Depends(get_runner),
+    session_service: DatabaseSessionService = Depends(get_session_service),
+) -> StreamingResponse:
     # Check if file exists
     try:
         f_store.get_file_metadata(user_id, file_id)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="File not found")
 
-    # TODO: Invoke AI workflow here.
-    # For now, we'll just simulate a "processing" state or similar if needed.
-    # The instructions don't specify what this should return or do exactly other than "Invokes the AI workflow".
-    # We could trigger a background task.
+    session_id = f"{file_id}_{sheet_idx}"
+    user_file, content = f_store.get_file(user_id, file_id)
+    sheet_data_list = convert_excel_to_sheet_data(content, [sheet_idx])
+    sheet_name, sheet_data = sheet_data_list[0]
 
-    return {"message": "Analysis started", "file_id": file_id, "sheet_idx": sheet_idx}
+    # Convert the sheet data to a csv string
+    excel_file_data = list_to_csv_string(sheet_data.data)
+
+    session = await session_service.get_session(
+        app_name="excel_tag", user_id=user_id, session_id=session_id
+    )
+    if not session:
+        session = await session_service.create_session(
+            app_name="excel_tag", user_id=user_id, session_id=session_id
+        )
+        if not session:
+            raise HTTPException(status_code=500, detail="Failed to create session")
+
+    async def event_generator():
+        try:
+            async with Aclosing(
+                runner.run_async(
+                    user_id=user_id,
+                    session_id=session_id,
+                    new_message=Content(parts=[Part(text="")], role="user"),
+                    state_delta={
+                        "excel_file_data": excel_file_data,
+                    },
+                    run_config=RunConfig(streaming_mode=StreamingMode.SSE),
+                )
+            ) as agen:
+                async for event in agen:
+                    if hasattr(event, "model_dump"):
+                        data = json.dumps(event.model_dump(), default=str)
+                    elif hasattr(event, "dict"):
+                        data = json.dumps(event.dict(), default=str)
+                    else:
+                        data = json.dumps(event, default=str)
+                    yield f"data: {data}\n\n"
+        except Exception as e:
+            error_data = json.dumps({"error": str(e)})
+            yield f"event: error\ndata: {error_data}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+    # return {"message": "Analysis started", "file_id": file_id, "sheet_idx": sheet_idx}
 
 
 class UpdateSheetInfoRequest(BaseModel):

@@ -1,17 +1,23 @@
 import io
+from typing import Optional
 
 from app.domain import SheetData
 from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 
 
-def convert_excel_to_sheet_data(excel_bytes: bytes) -> list[tuple[str, SheetData]]:
+def convert_excel_to_sheet_data(
+    excel_bytes: bytes, include_sheets: Optional[list[int]] = None
+) -> list[tuple[str, SheetData]]:
     workbook = load_workbook(
         filename=io.BytesIO(excel_bytes), read_only=True, data_only=True
     )
     sheets_data = []
 
-    for sheet_name in workbook.sheetnames:
+    for sheet_idx, sheet_name in enumerate(workbook.sheetnames):
+        if include_sheets is not None and sheet_idx not in include_sheets:
+            continue
+
         sheet = workbook[sheet_name]
 
         # In read_only mode, max_column might not be accurate until read,
