@@ -3,7 +3,7 @@ import shutil
 from pathlib import Path
 
 import pytest
-from app.domain import SheetInfoPayload, SheetStructure
+from app.domain import FileDetailResponse, SheetInfoPayload, SheetStructure
 from app.file_store.file_store import FileStore, LocalFileStoreBackend
 from app.server.server import (
     UpdateSheetInfoRequest,
@@ -13,6 +13,7 @@ from app.server.server import (
 )
 from app.sheet_info_store.sheet_info_store import SheetInfoStore
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 # --- Fixtures ---
 
@@ -145,15 +146,17 @@ def test_get_file_details(client, sample_xlsx_path):
     assert response.status_code == 200
     data = response.json()
 
-    assert data["file_id"] == file_id
-    # Check sheets - sample.xlsx should have some sheets
-    # If sample.xlsx is empty or not parsed correctly, this might fail,
-    # but based on code it tries to parse with openpyxl.
     assert "sheets" in data
+    assert len(data["sheets"]) == 5
+    assert len(data["sheets_data"]) == 5
+
     assert isinstance(data["sheets"], list)
-    # If sample.xlsx has content, we expect sheets
-    # We can check specific sheets if we knew the content of sample.xlsx,
-    # but generic check is safer without peeking.
+    assert isinstance(data["sheets_data"], list)
+
+    try:
+        FileDetailResponse.model_validate(data)
+    except ValidationError as e:
+        pytest.fail(f"Validation error: {e}")
 
 
 def test_delete_file(client, sample_xlsx_path):

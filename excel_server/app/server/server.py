@@ -1,16 +1,21 @@
-import io
 import os
 from contextlib import asynccontextmanager
 from typing import List, Optional
 
 import uvicorn
-from app.domain import SheetInfo, SheetInfoPayload, UserFile
+from app.domain import (
+    FileDetailResponse,
+    SheetData,
+    SheetInfo,
+    SheetInfoPayload,
+    UserFile,
+)
 from app.file_store.file_store import FileStore, LocalFileStoreBackend
+from app.server.excel_utils import convert_excel_to_sheet_data
 from app.sheet_info_store.sheet_info_store import SheetInfoStore
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from openpyxl import load_workbook
 from pydantic import BaseModel
 
 # --- Configuration ---
@@ -27,7 +32,7 @@ sheet_info_store: Optional[SheetInfoStore] = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global file_store, file_extract_store
+    global file_store, sheet_info_store
 
     # Initialize FileStore
     if not BASE_STORAGE_DIR:
@@ -79,14 +84,6 @@ class FileUpdate(BaseModel):
     original_filename: Optional[str] = None
 
 
-class ExtractUpdate(BaseModel):
-    payload: str
-
-
-class FileDetailResponse(UserFile):
-    sheets: List[SheetInfo]
-
-
 # --- Helper Dependencies ---
 
 
@@ -127,24 +124,16 @@ def get_file_details(
     user_id: str = Depends(get_user_id),
     f_store: FileStore = Depends(get_file_store),
     fe_store: SheetInfoStore = Depends(get_sheet_info_store),
-):
+) -> FileDetailResponse:
     try:
         # Get file metadata and content
         user_file, content = f_store.get_file(user_id, file_id)
 
-        # Parse Excel to get sheets
-        # Using io.BytesIO because openpyxl expects a file-like object
-        try:
-            workbook = load_workbook(filename=io.BytesIO(content), read_only=True)
-            sheet_names = workbook.sheetnames
-        except Exception as e:
-            # If we can't parse it as excel, maybe return empty sheets or error?
-            # Assuming strictly excel files for this usecase
-            print(f"Error parsing excel file: {e}")
-            sheet_names = []
+        sheet_data_list = convert_excel_to_sheet_data(content)
 
         sheets = []
-        for idx, name in enumerate(sheet_names):
+        sheets_data: list[SheetData] = []
+        for idx, (name, sheet_data) in enumerate(sheet_data_list):
             # Get latest extract for this sheet
             extract = fe_store.get_latest(user_id, file_id, idx)
             sheets.append(
@@ -157,8 +146,11 @@ def get_file_details(
                     version=extract.version if extract is not None else 0,
                 )
             )
+            sheets_data.append(sheet_data)
 
-        return FileDetailResponse(**user_file.model_dump(), sheets=sheets)
+        return FileDetailResponse(
+            **user_file.model_dump(), sheets=sheets, sheets_data=sheets_data
+        )
 
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -214,7 +206,7 @@ def update_sheet_info(
     request: UpdateSheetInfoRequest,
     user_id: str = Depends(get_user_id),
     fe_store: SheetInfoStore = Depends(get_sheet_info_store),
-):
+) -> SheetInfo:
     try:
         sheet_name = request.sheet_name
         payload = request.payload

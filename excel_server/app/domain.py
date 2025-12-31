@@ -52,3 +52,12 @@ class SheetInfo(BaseModel):
     sheet_name: str
     sheet_idx: int
     version: int
+
+
+class SheetData(BaseModel):
+    data: list[list[str]]
+
+
+class FileDetailResponse(BaseModel):
+    sheets: list[SheetInfo]
+    sheets_data: list[SheetData]
