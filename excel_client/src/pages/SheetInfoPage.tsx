@@ -13,50 +13,33 @@ import {
     IconButton
 } from '@radix-ui/themes';
 import { ChatBubbleIcon, Cross2Icon } from '@radix-ui/react-icons';
-
-const API_BASE = 'http://localhost:8080';
-
-// Interfaces based on backend domain
-interface SheetInfo {
-    user_id: string;
-    file_id: string;
-    sheet_name: string;
-    sheet_idx: number;
-    version: number;
-    // payload is optional/complex, omitting for now unless needed
-}
-
-interface SheetData {
-    data: string[][];
-}
-
-interface FileDetailResponse {
-    file_id: string;
-    original_filename: string;
-    user_id: string;
-    create_date: string;
-    sheets: SheetInfo[];
-    sheets_data: SheetData[];
-}
+import { useService } from '../services/serviceProvider';
+import type { FileDetailResponse } from '../domain/domain';
 
 export const SheetInfoPage = () => {
-    const { file_id } = useParams<{ file_id: string }>();
+    const { file_id, sheet_idx } = useParams<{ file_id: string; sheet_idx?: string }>();
     const [searchParams, setSearchParams] = useSearchParams();
     const [isChatOpen, setIsChatOpen] = useState(true);
-
+    const service = useService();
     // Get sheet_idx from URL or default to 0
 
     const activeSheetIdx = useMemo(() => {
-        return searchParams.get('sheet_idx') ? parseInt(searchParams.get('sheet_idx')!, 10) : 0;
-    }, [searchParams]);
+        const queryIdx = searchParams.get('sheet_idx');
+        if (queryIdx !== null) {
+            return parseInt(queryIdx, 10);
+        }
+        if (sheet_idx !== undefined) {
+            return parseInt(sheet_idx, 10);
+        }
+        return 0;
+    }, [searchParams, sheet_idx]);
 
     // Fetch Sheets
     const { data: sheets, isLoading: isLoadingSheets, isError: isErrorSheets } = useQuery<string[]>({
         queryKey: ['sheets', file_id],
         queryFn: async () => {
             if (!file_id) throw new Error('No file ID');
-            const res = await fetch(`${API_BASE}/sheets/${file_id}`);
-            return res.json();
+            return service.getSheets(file_id);
         },
         enabled: !!file_id
     });
@@ -66,11 +49,10 @@ export const SheetInfoPage = () => {
         queryKey: ['file', file_id, activeSheetIdx],
         queryFn: async () => {
             if (!file_id) throw new Error('No file ID');
-            const res = await fetch(`${API_BASE}/files/${file_id}/${activeSheetIdx}`);
-            if (!res.ok) throw new Error('Failed to fetch file details');
-            return res.json();
+            if (activeSheetIdx === undefined || activeSheetIdx === null) throw new Error('No sheet index');
+            return service.getFileDetails(file_id, activeSheetIdx);
         },
-        enabled: !!file_id
+        enabled: !!file_id && activeSheetIdx !== undefined && activeSheetIdx !== null
     });
 
 
@@ -125,7 +107,7 @@ export const SheetInfoPage = () => {
                 </Box>
                 <Box style={{ flexGrow: 1, overflow: 'hidden', position: 'relative' }}>
                     <ScrollArea style={{ flexGrow: 1, height: '100%' }}>
-                        <Table.Root variant="surface">
+                        <Table.Root variant="surface" size="1">
                             <Table.Header>
                                 <Table.Row style={{ position: 'sticky', top: 0, zIndex: 10 }}>
                                     {/* Sticky Header Row */}
@@ -135,7 +117,10 @@ export const SheetInfoPage = () => {
                                             top: 0,
                                             zIndex: 10,
                                             backgroundColor: 'var(--color-surface)',
-                                            whiteSpace: 'nowrap'
+                                            whiteSpace: 'nowrap',
+                                            padding: '2px 4px',
+                                            textAlign: 'center',
+                                            borderRight: '1px solid var(--gray-5)',
                                         }}>
                                             {header || `Col ${idx + 1}`}
                                         </Table.ColumnHeaderCell>
@@ -144,9 +129,16 @@ export const SheetInfoPage = () => {
                             </Table.Header>
                             <Table.Body>
                                 {currentSheetData?.data?.slice(1).map((row, rowIdx) => (
-                                    <Table.Row key={rowIdx}>
+                                    <Table.Row key={rowIdx} style={{ height: '23px' }}>
                                         {row.map((cell, cellIdx) => (
-                                            <Table.Cell key={cellIdx} style={{ whiteSpace: 'nowrap' }}>
+                                            <Table.Cell key={cellIdx} style={{
+                                                whiteSpace: 'nowrap',
+                                                padding: '0px 4px',
+                                                lineHeight: '22px',
+                                                height: '22px',
+                                                verticalAlign: 'middle',
+                                                borderRight: '1px solid var(--gray-5)',
+                                            }}>
                                                 {cell}
                                             </Table.Cell>
                                         ))}

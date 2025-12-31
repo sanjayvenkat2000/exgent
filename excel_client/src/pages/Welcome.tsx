@@ -2,6 +2,7 @@ import { useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Flex, Text, Heading, Button, Card, Table, Box, Container, ScrollArea, Badge, Separator } from '@radix-ui/themes';
+import { useService } from '../services/serviceProvider';
 
 const API_BASE = 'http://localhost:8080';
 
@@ -16,28 +17,20 @@ export const Welcome = () => {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const service = useService();
 
     // Fetch Files
     const { data: files, isLoading, isError } = useQuery<UserFile[]>({
         queryKey: ['files'],
         queryFn: async () => {
-            const res = await fetch(`${API_BASE}/files`);
-            if (!res.ok) throw new Error('Failed to fetch files');
-            return res.json();
+            return service.listFiles();
         }
     });
 
     // Upload File
     const uploadMutation = useMutation({
         mutationFn: async (file: File) => {
-            const formData = new FormData();
-            formData.append('file', file);
-            const res = await fetch(`${API_BASE}/upload`, {
-                method: 'POST',
-                body: formData,
-            });
-            if (!res.ok) throw new Error('Upload failed');
-            return res.json();
+            return service.uploadFile(file);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['files'] });
