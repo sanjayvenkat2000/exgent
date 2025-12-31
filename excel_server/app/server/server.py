@@ -15,7 +15,7 @@ from app.domain import (
 )
 from app.exgent.agent import excel_tag_agent
 from app.file_store.file_store import FileStore, LocalFileStoreBackend
-from app.server.excel_utils import convert_excel_to_sheet_data
+from app.server.excel_utils import convert_excel_to_sheet_data, get_workbook_sheets
 from app.sheet_info_store.sheet_info_store import SheetInfoStore
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
@@ -162,16 +162,20 @@ def read_root():
     return {"message": "Hello, World!"}
 
 
-@app.get("/files", response_model=List[UserFile])
-def list_files(
-    user_id: str = Depends(get_user_id), store: FileStore = Depends(get_file_store)
-):
-    return store.list_files(user_id)
+@app.get("/sheets/{file_id}", response_model=list[str])
+def get_sheets(
+    file_id: str,
+    user_id: str = Depends(get_user_id),
+    f_store: FileStore = Depends(get_file_store),
+) -> list[str]:
+    user_file, content = f_store.get_file(user_id, file_id)
+    return get_workbook_sheets(content)
 
 
-@app.get("/files/{file_id}", response_model=FileDetailResponse)
+@app.get("/files/{file_id}/{sheet_idx}", response_model=FileDetailResponse)
 def get_file_details(
     file_id: str,
+    sheet_idx: int,
     user_id: str = Depends(get_user_id),
     f_store: FileStore = Depends(get_file_store),
     fe_store: SheetInfoStore = Depends(get_sheet_info_store),
@@ -180,7 +184,7 @@ def get_file_details(
         # Get file metadata and content
         user_file, content = f_store.get_file(user_id, file_id)
 
-        sheet_data_list = convert_excel_to_sheet_data(content)
+        sheet_data_list = convert_excel_to_sheet_data(content, [sheet_idx])
 
         sheets = []
         sheets_data: list[SheetData] = []
@@ -207,6 +211,13 @@ def get_file_details(
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/files", response_model=List[UserFile])
+def list_files(
+    user_id: str = Depends(get_user_id), store: FileStore = Depends(get_file_store)
+):
+    return store.list_files(user_id)
 
 
 @app.delete("/files/{file_id}", response_model=UserFile)

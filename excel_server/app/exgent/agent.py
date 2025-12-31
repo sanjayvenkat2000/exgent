@@ -1,9 +1,31 @@
 from textwrap import dedent
-from typing import Any, Optional
+from typing import Any, AsyncGenerator, Optional
 
 from google.adk.agents.llm_agent import LlmAgent
 from google.adk.agents.sequential_agent import SequentialAgent
+from google.adk.models.lite_llm import LiteLlm
+from google.adk.models.llm_request import LlmRequest
+from google.adk.models.llm_response import LlmResponse
 from pydantic import BaseModel
+
+
+class CustomLiteLlm(LiteLlm):
+    force_stream: Optional[bool] = None
+
+    def __init__(self, model: str, stream: Optional[bool] = None, **kwargs):
+        super().__init__(model=model, **kwargs)
+        self.force_stream = stream
+
+    async def generate_content_async(
+        self, llm_request: LlmRequest, stream: bool = False
+    ) -> AsyncGenerator[LlmResponse, None]:
+        if self.force_stream is not None:
+            stream = self.force_stream
+
+        async for response in super().generate_content_async(
+            llm_request, stream=stream
+        ):
+            yield response
 
 
 class ReportGroup(BaseModel):
@@ -53,6 +75,7 @@ Your response should be human readable **markdown:: format.
     * Make sure you output all the groups you have identified.
 
 Important: do not include any other text or explanation in your response.
+If you notice you have already performed the task, varify your work and output a fresh response.
 -----
 
 **Data for Analysis:**
@@ -78,7 +101,10 @@ class UIResponse(BaseModel):
 
 generate_agent = LlmAgent(
     name="excel_tag_generate_agent",
-    model="gemini-2.5-pro",
+    model=CustomLiteLlm(
+        model="gemini/gemini-2.5-pro",
+        stream=True,
+    ),
     instruction=SHEET_STRUCTURE_PROMPT,
     output_key="sheet_structure_human_readable",
 )
@@ -86,7 +112,10 @@ generate_agent = LlmAgent(
 
 structured_response_agent = LlmAgent(
     name="excel_tag_structured_agent",
-    model="gemini-2.5-flash-lite",
+    model=CustomLiteLlm(
+        model="gemini/gemini-2.5-flash",
+        stream=False,
+    ),
     include_contents="none",
     instruction=STRUCTUED_RESPONSE_PROMPT,
     output_key="sheet_structure_json",

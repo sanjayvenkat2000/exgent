@@ -6,6 +6,15 @@ from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 
 
+def get_workbook_sheets(
+    excel_bytes: bytes,
+) -> list[str]:
+    workbook = load_workbook(
+        filename=io.BytesIO(excel_bytes), read_only=True, data_only=True
+    )
+    return workbook.sheetnames
+
+
 def convert_excel_to_sheet_data(
     excel_bytes: bytes, include_sheets: Optional[list[int]] = None
 ) -> list[tuple[str, SheetData]]:
