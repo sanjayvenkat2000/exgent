@@ -182,7 +182,6 @@ def get_sheet_data_by_index(
     sheet_idx: int,
     user_id: str = Depends(get_user_id),
     f_store: FileStore = Depends(get_file_store),
-    fe_store: SheetInfoStore = Depends(get_sheet_info_store),
 ) -> SheetData:
     user_file, content = f_store.get_file(user_id, file_id)
     return get_sheet_data(content, sheet_idx)
@@ -193,9 +192,9 @@ def get_sheet_info_by_index(
     file_id: str,
     sheet_idx: int,
     user_id: str = Depends(get_user_id),
-    fe_store: SheetInfoStore = Depends(get_sheet_info_store),
+    sheet_info_store: SheetInfoStore = Depends(get_sheet_info_store),
 ) -> Optional[SheetInfo]:
-    result = fe_store.get_latest(user_id, file_id, sheet_idx)
+    result = sheet_info_store.get_latest(user_id, file_id, sheet_idx)
     return (
         result
         if result is not None
@@ -215,7 +214,7 @@ def get_file_details(
     file_id: str,
     user_id: str = Depends(get_user_id),
     f_store: FileStore = Depends(get_file_store),
-    fe_store: SheetInfoStore = Depends(get_sheet_info_store),
+    sheet_info_store: SheetInfoStore = Depends(get_sheet_info_store),
 ) -> FileDetailResponse:
     try:
         # Get file metadata and content
@@ -227,7 +226,7 @@ def get_file_details(
         sheets_data: list[SheetData] = []
         for idx, (name, sheet_data) in enumerate(sheet_data_list):
             # Get latest extract for this sheet
-            extract = fe_store.get_latest(user_id, file_id, idx)
+            extract = sheet_info_store.get_latest(user_id, file_id, idx)
             sheets.append(
                 SheetInfo(
                     user_id=user_id,
@@ -292,7 +291,7 @@ async def analyze_file_sheet(
     sheet_idx: int,
     user_id: str = Depends(get_user_id),
     f_store: FileStore = Depends(get_file_store),
-    fe_store: SheetInfoStore = Depends(get_sheet_info_store),
+    sheet_info_store: SheetInfoStore = Depends(get_sheet_info_store),
     runner: Runner = Depends(get_runner),
     session_service: DatabaseSessionService = Depends(get_session_service),
 ) -> StreamingResponse:
@@ -330,7 +329,15 @@ async def analyze_file_sheet(
                     state_delta={
                         "excel_file_data": excel_file_data,
                     },
-                    run_config=RunConfig(streaming_mode=StreamingMode.SSE),
+                    run_config=RunConfig(
+                        streaming_mode=StreamingMode.SSE,
+                        custom_metadata={
+                            "sheet_info_store": sheet_info_store,
+                            "file_id": file_id,
+                            "sheet_idx": sheet_idx,
+                            "sheet_name": sheet_name,
+                        },
+                    ),
                 )
             ) as agen:
                 async for event in agen:
@@ -361,12 +368,14 @@ def update_sheet_info(
     sheet_idx: int,
     request: UpdateSheetInfoRequest,
     user_id: str = Depends(get_user_id),
-    fe_store: SheetInfoStore = Depends(get_sheet_info_store),
+    sheet_info_store: SheetInfoStore = Depends(get_sheet_info_store),
 ) -> SheetInfo:
     try:
         sheet_name = request.sheet_name
         payload = request.payload
-        return fe_store.add_sheet_info(user_id, file_id, sheet_idx, sheet_name, payload)
+        return sheet_info_store.add_sheet_info(
+            user_id, file_id, sheet_idx, sheet_name, payload
+        )
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
     except Exception as e:
