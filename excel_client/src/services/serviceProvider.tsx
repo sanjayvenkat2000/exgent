@@ -1,5 +1,5 @@
 import React, { createContext, use } from 'react';
-import type { FileDetailResponse, UserFile } from '../domain/domain'
+import type { FileDetailResponse, SheetData, SheetInfo, UserFile } from '../domain/domain'
 
 const API_BASE_URL = 'http://localhost:8080';
 
@@ -11,8 +11,14 @@ export class Service {
         return response.json();
     }
 
-    async getFileDetails(fileId: string, sheetIdx: number): Promise<FileDetailResponse> {
-        const url = `${API_BASE_URL}/files/${fileId}/${sheetIdx}`;
+    async getSheetData(fileId: string, sheetIdx: number): Promise<SheetData> {
+        const url = `${API_BASE_URL}/sheetdata/${fileId}/${sheetIdx}`;
+        const response = await fetch(url);
+        return response.json();
+    }
+
+    async getSheetInfo(fileId: string, sheetIdx: number): Promise<SheetInfo | null> {
+        const url = `${API_BASE_URL}/sheetinfo/${fileId}/${sheetIdx}`;
         const response = await fetch(url);
         return response.json();
     }

@@ -14,7 +14,7 @@ import {
 } from '@radix-ui/themes';
 import { ChatBubbleIcon, Cross2Icon } from '@radix-ui/react-icons';
 import { useService } from '../services/serviceProvider';
-import type { FileDetailResponse } from '../domain/domain';
+import type { FileDetailResponse, SheetData } from '../domain/domain';
 
 export const SheetInfoPage = () => {
     const { file_id, sheet_idx } = useParams<{ file_id: string; sheet_idx?: string }>();
@@ -34,8 +34,8 @@ export const SheetInfoPage = () => {
         return 0;
     }, [searchParams, sheet_idx]);
 
-    // Fetch Sheets
-    const { data: sheets, isLoading: isLoadingSheets, isError: isErrorSheets } = useQuery<string[]>({
+    // Fetch Sheet Names
+    const { data: sheet_names, isLoading: isLoadingSheets, isError: isErrorSheets } = useQuery<string[]>({
         queryKey: ['sheets', file_id],
         queryFn: async () => {
             if (!file_id) throw new Error('No file ID');
@@ -44,22 +44,27 @@ export const SheetInfoPage = () => {
         enabled: !!file_id
     });
 
-    // Fetch File Details
-    const { data: fileDetails, isLoading, isError } = useQuery<FileDetailResponse>({
+    // Fetch current Sheet Data
+    const { data: currentSheetData, isLoading, isError } = useQuery<SheetData>({
         queryKey: ['file', file_id, activeSheetIdx],
         queryFn: async () => {
             if (!file_id) throw new Error('No file ID');
             if (activeSheetIdx === undefined || activeSheetIdx === null) throw new Error('No sheet index');
-            return service.getFileDetails(file_id, activeSheetIdx);
+            return service.getSheetData(file_id, activeSheetIdx);
         },
         enabled: !!file_id && activeSheetIdx !== undefined && activeSheetIdx !== null
     });
 
-
-    const currentSheetData = useMemo(() => {
-        return fileDetails?.sheets_data?.[0];
-    }, [fileDetails]);
-
+    // Fetch current Sheet Info
+    const { data: currentSheetInfo, isLoading: isLoadingSheetInfo, isError: isErrorSheetInfo } = useQuery<SheetInfo>({
+        queryKey: ['sheetinfo', file_id, activeSheetIdx],
+        queryFn: async () => {
+            if (!file_id) throw new Error('No file ID');
+            if (activeSheetIdx === undefined || activeSheetIdx === null) throw new Error('No sheet index');
+            return service.getSheetInfo(file_id, activeSheetIdx);
+        },
+        enabled: !!file_id && activeSheetIdx !== undefined && activeSheetIdx !== null
+    });
 
     const handleTabChange = useCallback((value: string) => {
         setSearchParams({ sheet_idx: value });
@@ -73,13 +78,15 @@ export const SheetInfoPage = () => {
         );
     }
 
-    if (isError || !fileDetails) {
+    if (isError || !sheet_names) {
         return (
             <Flex align="center" justify="center" style={{ height: 'calc(100vh - 60px)' }}>
                 <Text color="red">Error loading file details.</Text>
             </Flex>
         );
     }
+
+    console.log(currentSheetInfo);
 
     return (
         <Box style={{ height: 'calc(100vh - 60px)', overflow: 'hidden', display: 'flex', flexDirection: 'row' }}>
@@ -97,7 +104,7 @@ export const SheetInfoPage = () => {
                 <Box style={{ flexShrink: 0, overflowX: 'auto' }}>
                     <Tabs.Root value={activeSheetIdx.toString()} onValueChange={handleTabChange} style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
                         <Tabs.List style={{ flexWrap: 'nowrap', width: 'fit-content' }}>
-                            {sheets?.map((sheet, index) => (
+                            {sheet_names?.map((sheet, index) => (
                                 <Tabs.Trigger key={index} value={index.toString()}>
                                     {sheet}
                                 </Tabs.Trigger>
