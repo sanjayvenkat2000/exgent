@@ -19,36 +19,40 @@ You are an expert financial analyst. Your task is to receive a snippet of a fina
 ## 📚 Internal Ontology
 You must use **only** the tags from the lists below.
 
-### Cash Flow Statement Concepts
-  * Operating Cash Flow (Net cash generated from core operations)
-  * Investing Cash Flow (Cash used for long-term investments)
-  * Financing Cash Flow (Cash used for debt or equity)
-  * Net Cash Flow (Sum of operating, investing, and financing cash flows)
-
-
 ### Income Statement Concepts
-  * **Gross Bookings**  (Total value of all contracts signed)
-  * **Adjusted Net Revenue** (Actual cash-in after adjustments)
-  * **Cost of Goods Sold** (COGS) (Server costs, hosting, third-party APIs)
-  * **Operating Income** (Gross Bookings - Cost of Goods Sold)
+  * Gross Revenue
+  * Total Discounts
+  * Total Cancellation and Returns
+  * Net Revenue
+  * Gross Product Cost
+  * Fulfillment, Shipping, Merchant Fee
+  * Marketing
+  * Payroll, Benefits, and Admin
+  * Other Operating Expenses
+  * Operating Income
+  * Non operating income
+  * Non operating expenses
+  * Interest
+  * Depreciation & Amortization
+  * Pre-Tax Income
+  * Taxes
 
 ### Balance Sheet Concepts
-  * **Cash and bank balances** : Highly liquid assets held in checking, savings, or money market accounts that are immediately available for use.
-  * **Accounts payable** : Short-term obligations owed to suppliers or vendors for goods or services purchased on credit.
-  * **Accounts receivable** : Money owed to the company by customers for products or services delivered but not yet paid for.
-  * **Inventory** : The value of raw materials, work-in-progress, and finished goods held by the business for eventual sale.
-  * **Property, Plant, & Equipment (PP&E)** : Tangible, long-term physical assets used in business operations, such as machinery, buildings, and vehicles.
-  * **Accumulated Depreciation & Amortization** : A contra-asset account that tracks the total reduction in value of fixed and intangible assets over their useful life.
-  * **Other Long-Term Assets** : Non-current assets that do not fall under PP&E, such as long-term investments, deferred tax assets, or security deposits.
-  * **Credit Cards** : Short-term revolving debt used for operational expenses, typically classified as a current liability.
-  * **Total Current Assets** : The sum of all assets expected to be converted into cash, sold, or consumed within one fiscal year.
-  * **Total Current Liabilities** : The sum of all debts and obligations due to be paid within one fiscal year.
-  * **Total Long-Term Assets** : The aggregate value of all assets not expected to be liquidated within the next 12 months.
-  * **Total Long-Term Liabilities** : Financial obligations, such as loans or bonds, with a maturity date extending beyond one year.
-  * **Total Equity** : The residual interest in the company's assets after subtracting all liabilities; essentially, the "book value" belonging to shareholders.
-  * **Total Assets** : The combined value of everything the company owns (Current Assets + Long-Term Assets).
-  * **Total Liabilities** : The combined value of everything the company owes to external parties (Current Liabilities + Long-Term Liabilities).
-
+  * Cash and bank balances
+  * Inventory
+  * Accounts receivable
+  * Total Current Assets
+  * Property, Plant, & Equipment
+  * Accumulated Depreciation & Ammortization
+  * Other Long Term Assets
+  * Credit Cards
+  * Accounts payable
+  * Short Term Debt (under CL)
+  * Total Current Liabilities
+  * Long Term Debt (under LTL)
+  * Long Term Liabilities ex Debt
+  * Equity
+  
 ## ⚙️ Instructions & Rules
 
 1.  **Analyze Each Line:** You will be given a block of text. Process every single line provided (e.g., `Row:`, `Item:`, `Total:`, and context lines like `Verifying group:`).
@@ -125,9 +129,25 @@ class TagAllGroupsAgent(BaseAgent):
             async for event in tag_report_group_agent.run_async(ctx):
                 if not event.partial:
                     results = get_text_content(event)
-                    for row in results.split("\n") if results is not None else []:
-                        row_number, tag = row.split(",")
-                        sheet_tags.append(SheetTag(row=int(row_number), tag=tag))
+                    if results:
+                        for row in results.split("\n"):
+                            row = row.strip()
+                            if not row:
+                                continue
+                            # Split only on the first comma to handle tags containing commas
+                            parts = row.split(",", 1)
+                            if len(parts) != 2:
+                                continue
+
+                            row_number_str, tag = parts
+                            try:
+                                row_number = int(row_number_str.strip())
+                                sheet_tags.append(
+                                    SheetTag(row=row_number, tag=tag.strip())
+                                )
+                            except ValueError:
+                                # Skip lines that don't start with a valid integer row number
+                                continue
 
             sheet_info_store: SheetInfoStore = get_custom_metadata(
                 ctx, "sheet_info_store"
