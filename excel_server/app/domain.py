@@ -15,11 +15,20 @@ class ReportGroup(BaseModel):
     total: int
 
 
+class ReportGroupValidationResult(BaseModel):
+    group_name: str
+    date_column: int
+    calculated_total: float
+    actual_total: float
+    matches: bool
+
+
 class SheetStructure(BaseModel):
     statement_type: str
     financial_items_column: int
     date_columns: list[int]
     groups: list[ReportGroup]
+    validation_results: list[ReportGroupValidationResult] = []
 
 
 class SheetTag(BaseModel):

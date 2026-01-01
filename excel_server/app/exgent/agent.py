@@ -1,46 +1,21 @@
 from textwrap import dedent
-from typing import Any, AsyncGenerator, Optional
+from typing import Any, Optional
 
+from app.domain import SheetInfoPayload, SheetStructure
+from app.exgent.agent_utils import (
+    CustomLiteLlm,
+    get_custom_metadata,
+    get_session_state,
+    get_text_content,
+)
+from app.exgent.tag_groups_agent import tag_all_groups_agent
+from app.exgent.validate_sheet_structure_agent import ValidateSheetStructureAgent
+from app.sheet_info_store.sheet_info_store import SheetInfoStore
+from google.adk.agents.callback_context import CallbackContext
 from google.adk.agents.llm_agent import LlmAgent
 from google.adk.agents.sequential_agent import SequentialAgent
-from google.adk.models.lite_llm import LiteLlm
-from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from pydantic import BaseModel
-
-
-class CustomLiteLlm(LiteLlm):
-    force_stream: Optional[bool] = None
-
-    def __init__(self, model: str, stream: Optional[bool] = None, **kwargs):
-        super().__init__(model=model, **kwargs)
-        self.force_stream = stream
-
-    async def generate_content_async(
-        self, llm_request: LlmRequest, stream: bool = False
-    ) -> AsyncGenerator[LlmResponse, None]:
-        if self.force_stream is not None:
-            stream = self.force_stream
-
-        async for response in super().generate_content_async(
-            llm_request, stream=stream
-        ):
-            yield response
-
-
-class ReportGroup(BaseModel):
-    name: str
-    header_rows: list[int]
-    line_items: list[int]
-    total: int
-
-
-class SheetStructure(BaseModel):
-    statement_type: str
-    financial_items_column: int
-    date_columns: list[int]
-    groups: list[ReportGroup]
-
 
 EXCEL_FILE_DATA = "excel_file_data"
 
@@ -66,7 +41,7 @@ Important: You must complete all the steps above before generating your output.
 **Output Format:**
 Your response should be human readable **markdown:: format.
 1. Clearly state the statement type
-2. Then state the financial items column and date columns. You must output the column index. 
+2. Then state the financial items column and date columns. You must output the column index. Index starts at 1.
 3. Then proceed to ouput the groups in the following format:
     * Group Name: A descriptive name from the group
     * Header Rows: List of comma separated row numbers representing the header rows in the group
@@ -110,6 +85,45 @@ generate_agent = LlmAgent(
 )
 
 
+def validate_sheet_structure_and_save(
+    callback_context: CallbackContext, llm_response: LlmResponse
+) -> Optional[LlmResponse]:
+    if llm_response.partial is False:
+        sheet_info_store: SheetInfoStore = get_custom_metadata(
+            callback_context._invocation_context, "sheet_info_store"
+        )
+        file_id: str = get_custom_metadata(
+            callback_context._invocation_context, "file_id"
+        )
+        sheet_idx: int = get_custom_metadata(
+            callback_context._invocation_context, "sheet_idx"
+        )
+        sheet_name: str = get_custom_metadata(
+            callback_context._invocation_context, "sheet_name"
+        )
+
+        session_state = get_session_state(callback_context._invocation_context)
+
+        text_response = get_text_content(llm_response)
+        if text_response is not None:
+            sheet_structure = SheetStructure.model_validate_json(text_response)
+            sheet_info_payload = SheetInfoPayload(
+                structure=sheet_structure,
+                tags=[],
+            )
+
+            session_state["sheet_structure_json"] = text_response
+
+            sheet_info_store.add_sheet_info(
+                user_id="excel_tag_structured_agent",
+                file_id=file_id,
+                sheet_idx=sheet_idx,
+                sheet_name=sheet_name,
+                payload=sheet_info_payload,
+            )
+            return None
+
+
 structured_response_agent = LlmAgent(
     name="excel_tag_structured_agent",
     model=CustomLiteLlm(
@@ -118,12 +132,21 @@ structured_response_agent = LlmAgent(
     ),
     include_contents="none",
     instruction=STRUCTUED_RESPONSE_PROMPT,
-    output_key="sheet_structure_json",
     output_schema=SheetStructure,
+    after_model_callback=validate_sheet_structure_and_save,
+    output_key="sheet_structure_json",
 )
 
+validate_sheet_structure_agent = ValidateSheetStructureAgent(
+    input_key="sheet_structure_json"
+)
 
 excel_tag_agent = SequentialAgent(
     name="excel_tag_agent",
-    sub_agents=[generate_agent, structured_response_agent],
+    sub_agents=[
+        generate_agent,
+        structured_response_agent,
+        validate_sheet_structure_agent,
+        tag_all_groups_agent,
+    ],
 )
