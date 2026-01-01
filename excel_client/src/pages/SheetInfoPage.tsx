@@ -10,11 +10,15 @@ import {
     Text,
     Heading,
     Button,
-    IconButton
+    IconButton,
+    Badge
 } from '@radix-ui/themes';
 import { ChatBubbleIcon, Cross2Icon } from '@radix-ui/react-icons';
 import { useService } from '../services/serviceProvider';
-import type { FileDetailResponse, SheetData } from '../domain/domain';
+import type { SheetData, SheetInfo, ReportGroup, SheetTag } from '../domain/domain';
+
+const rowGroupColorsOrange = ["#FFD19A", "#FFC182", "#F5AE73"];
+const rowGroupColorsBlue = ["#D6EAF8", "#AED6F1", "#85C1E9"];
 
 export const SheetInfoPage = () => {
     const { file_id, sheet_idx } = useParams<{ file_id: string; sheet_idx?: string }>();
@@ -56,7 +60,7 @@ export const SheetInfoPage = () => {
     });
 
     // Fetch current Sheet Info
-    const { data: currentSheetInfo, isLoading: isLoadingSheetInfo, isError: isErrorSheetInfo } = useQuery<SheetInfo>({
+    const { data: currentSheetInfo, isLoading: isLoadingSheetInfo, isError: isErrorSheetInfo } = useQuery<SheetInfo | null>({
         queryKey: ['sheetinfo', file_id, activeSheetIdx],
         queryFn: async () => {
             if (!file_id) throw new Error('No file ID');
@@ -69,6 +73,50 @@ export const SheetInfoPage = () => {
     const handleTabChange = useCallback((value: string) => {
         setSearchParams({ sheet_idx: value });
     }, [setSearchParams]);
+
+    const rowGroupColors = useMemo(() => {
+        const groups = currentSheetInfo?.payload?.structure?.groups || [];
+        const colorMap: Record<number, string> = {};
+
+        groups.forEach((group: ReportGroup, idx: number) => {
+            const palette = idx % 2 === 0 ? rowGroupColorsOrange : rowGroupColorsBlue;
+
+            // Header: Middle shade
+            group.header_rows.forEach((row: number) => {
+                colorMap[row] = palette[1];
+            });
+
+            // Line items: Lightest shade
+            group.line_items.forEach((row: number) => {
+                colorMap[row] = palette[0];
+            });
+
+            // Total: Darkest shade
+            colorMap[group.total] = palette[2];
+        });
+
+        return colorMap;
+    }, [currentSheetInfo]);
+
+    const rowTags = useMemo(() => {
+        const rowTags: Record<number, string> = {};
+        (currentSheetInfo?.payload?.tags || []).forEach((t: SheetTag) => {
+            rowTags[t.row] = t.tag;
+        });
+        return rowTags;
+    }, [currentSheetInfo?.payload?.tags]);
+
+    const rowGroupNames = useMemo(() => {
+        const rowGroupNames: Record<number, string> = {};
+        (currentSheetInfo?.payload?.structure?.groups || []).forEach((g: ReportGroup) => {
+            const idx = g.header_rows[0] ?? g.line_items[0];
+            if (idx) {
+                rowGroupNames[idx] = g.name;
+            }
+        });
+        return rowGroupNames;
+    }, [currentSheetInfo?.payload?.structure?.groups]);
+
 
     if (isLoading) {
         return (
@@ -85,8 +133,6 @@ export const SheetInfoPage = () => {
             </Flex>
         );
     }
-
-    console.log(currentSheetInfo);
 
     return (
         <Box style={{ height: 'calc(100vh - 60px)', overflow: 'hidden', display: 'flex', flexDirection: 'row' }}>
@@ -136,16 +182,26 @@ export const SheetInfoPage = () => {
                             </Table.Header>
                             <Table.Body>
                                 {currentSheetData?.data?.slice(1).map((row, rowIdx) => (
-                                    <Table.Row key={rowIdx} style={{ height: '23px' }}>
+                                    <Table.Row key={rowIdx} style={{ height: '23px', backgroundColor: rowGroupColors[rowIdx + 1] }}>
                                         {row.map((cell, cellIdx) => (
                                             <Table.Cell key={cellIdx} style={{
-                                                whiteSpace: 'nowrap',
+                                                whiteSpace: 'pre',
                                                 padding: '0px 4px',
                                                 lineHeight: '22px',
                                                 height: '22px',
                                                 verticalAlign: 'middle',
                                                 borderRight: '1px solid var(--gray-5)',
                                             }}>
+                                                {cellIdx === 1 && rowTags[rowIdx + 1] && (
+                                                    <Badge variant="soft" radius="full" color="gray" style={{ marginRight: '8px' }}>
+                                                        {rowTags[rowIdx + 1]}
+                                                    </Badge>
+                                                )}
+                                                {/* {cellIdx === 1 && rowGroupNames[rowIdx + 1] && (
+                                                    <Text size="1" color="gray">
+                                                        {rowGroupNames[rowIdx + 1]}
+                                                    </Text>
+                                                )} */}
                                                 {cell}
                                             </Table.Cell>
                                         ))}
