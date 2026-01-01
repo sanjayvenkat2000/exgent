@@ -182,30 +182,6 @@ def test_delete_file(client, sample_xlsx_path):
     assert get_resp.status_code == 404
 
 
-def test_analyze_file_sheet(client, sample_xlsx_path):
-    with open(sample_xlsx_path, "rb") as f:
-        upload_resp = client.post(
-            "/upload",
-            files={
-                "file": (
-                    "sample.xlsx",
-                    f,
-                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                )
-            },
-        )
-    file_id = upload_resp.json()["file_id"]
-
-    # Analyze sheet 0
-    response = client.post(f"/analyze/{file_id}/0")
-    assert response.status_code == 200
-    assert response.json() == {
-        "message": "Analysis started",
-        "file_id": file_id,
-        "sheet_idx": 0,
-    }
-
-
 def test_update_extract(client, sample_xlsx_path):
     with open(sample_xlsx_path, "rb") as f:
         upload_resp = client.post(

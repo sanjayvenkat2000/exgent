@@ -152,3 +152,12 @@ def test_auth_callback(sheet_info_store):
 
     with pytest.raises(PermissionError):
         sheet_info_store.get_history("user1", "file1", 0)
+
+
+def test_get_latest_no_results(sheet_info_store):
+    user_id = "user123"
+    file_id = "non_existent_file"
+    sheet_idx = 0
+
+    latest = sheet_info_store.get_latest(user_id, file_id, sheet_idx)
+    assert latest is None

@@ -1,6 +1,6 @@
 import os
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Callable, List, Optional
 from uuid import uuid4
@@ -9,6 +9,11 @@ from sqlalchemy import Boolean, DateTime, String, create_engine, select
 from sqlalchemy.orm import Mapped, declarative_base, mapped_column, sessionmaker
 
 from app.domain import UserFile
+
+
+def get_utc_now():
+    return datetime.now(UTC)
+
 
 # SQLAlchemy Base
 Base = declarative_base()
@@ -22,9 +27,9 @@ class UserFileModel(Base):
     user_id: Mapped[str] = mapped_column(String)
     file_uri: Mapped[str] = mapped_column(String)
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
-    create_date: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    create_date: Mapped[datetime] = mapped_column(DateTime, default=get_utc_now)
     update_date: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=get_utc_now, onupdate=get_utc_now
     )
 
     def to_pydantic(self) -> UserFile:
@@ -117,8 +122,8 @@ class FileStore:
             original_filename=filename,
             user_id=user_id,
             file_uri=file_uri,
-            create_date=datetime.utcnow(),
-            update_date=datetime.utcnow(),
+            create_date=get_utc_now(),
+            update_date=get_utc_now(),
             is_deleted=False,
         )
 

@@ -32,7 +32,9 @@ class SheetInfoModel(Base):
     sheet_name: Mapped[str] = mapped_column(String)
     payload: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     updated_by: Mapped[str] = mapped_column(String)
-    create_time: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    create_time: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
 
     def to_pydantic(self) -> SheetInfo:
         if self.payload is not None:
