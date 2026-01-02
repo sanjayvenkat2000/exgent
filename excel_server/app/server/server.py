@@ -188,7 +188,16 @@ def delete_file(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/files/{file_id}", response_model=FileDetailResponse)
+@app.get("/files/{file_id}", response_model=UserFile)
+def get_user_file(
+    file_id: str,
+    user_id: str = Depends(get_user_id),
+    store: FileStore = Depends(get_file_store),
+) -> UserFile:
+    return store.get_file_metadata(user_id, file_id)
+
+
+@app.get("/filedetails/{file_id}", response_model=FileDetailResponse)
 def get_file_details(
     file_id: str,
     user_id: str = Depends(get_user_id),
