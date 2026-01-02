@@ -5,7 +5,7 @@ import { Theme } from '@radix-ui/themes'
 import '@radix-ui/themes/styles.css'
 import './index.css'
 import App from './App'
-import { Service, ServiceProvider } from './services/serviceProvider'
+import { Service, ServiceProvider } from './domain/serviceProvider'
 import { ChatStreamProvider } from './domain/ChatStreamProvider'
 
 const queryClient = new QueryClient()

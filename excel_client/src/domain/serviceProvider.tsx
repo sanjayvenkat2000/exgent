@@ -1,5 +1,6 @@
 import React, { createContext, use } from 'react';
-import type { SheetData, SheetInfo, SheetInfoPayload, UserFile } from '../domain/domain'
+import type { SheetData, SheetInfo, SheetInfoPayload, UserFile } from './domain'
+import type { Event } from './googleAdkTypes';
 
 const API_BASE_URL = 'http://localhost:8080';
 
@@ -33,6 +34,12 @@ export class Service {
             body: JSON.stringify({ sheet_name, payload: sheetInfo }),
         });
         if (!response.ok) throw new Error('Failed to update sheet info');
+        return response.json();
+    }
+
+    async getSheetChatHistory(fileId: string, sheetIdx: number): Promise<Event[]> {
+        const url = `${API_BASE_URL}/sheetchat/history/${fileId}/${sheetIdx}`;
+        const response = await fetch(url);
         return response.json();
     }
 

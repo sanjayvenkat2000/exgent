@@ -14,7 +14,7 @@ import {
 } from '@radix-ui/themes';
 import { ChatBubbleIcon, Cross2Icon } from '@radix-ui/react-icons';
 import { TagCell } from '../components/TagCell';
-import { useService } from '../services/serviceProvider';
+import { useService } from '../domain/serviceProvider';
 import type { SheetData, SheetInfo, ReportGroup, SheetTag } from '../domain/domain';
 import { produce } from 'immer';
 
