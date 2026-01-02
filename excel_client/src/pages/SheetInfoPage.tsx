@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useSearchParams, useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
     Flex,
     Box,
@@ -10,12 +10,13 @@ import {
     Text,
     Heading,
     Button,
-    IconButton,
-    Badge
+    IconButton
 } from '@radix-ui/themes';
 import { ChatBubbleIcon, Cross2Icon } from '@radix-ui/react-icons';
+import { TagCell } from '../components/TagCell';
 import { useService } from '../services/serviceProvider';
 import type { SheetData, SheetInfo, ReportGroup, SheetTag } from '../domain/domain';
+import { produce } from 'immer';
 
 const rowGroupColorsOrange = ["#FFD19A", "#FFC182", "#F5AE73"];
 const rowGroupColorsBlue = ["#D6EAF8", "#AED6F1", "#85C1E9"];
@@ -25,6 +26,7 @@ export const SheetInfoPage = () => {
     const [searchParams, setSearchParams] = useSearchParams();
     const [isChatOpen, setIsChatOpen] = useState(true);
     const service = useService();
+    const queryClient = useQueryClient();
     // Get sheet_idx from URL or default to 0
 
     const activeSheetIdx = useMemo(() => {
@@ -117,6 +119,56 @@ export const SheetInfoPage = () => {
         return rowGroupNames;
     }, [currentSheetInfo?.payload?.structure?.groups]);
 
+    const [changingRow, setChangingRow] = useState<number | null>(null);
+
+    const mutation = useMutation({
+        mutationFn: async (newSheetInfo: SheetInfo) => {
+            if (!file_id || activeSheetIdx === undefined || !newSheetInfo.payload) {
+                throw new Error("Missing required data for update");
+            }
+            return service.updateSheetInfo(file_id, activeSheetIdx, newSheetInfo.sheet_name, newSheetInfo.payload);
+        },
+        onSuccess: () => {
+            setChangingRow(null);
+            queryClient.invalidateQueries({ queryKey: ['sheetinfo', file_id, activeSheetIdx] });
+        },
+        onError: () => {
+            setChangingRow(null);
+        }
+    });
+
+    const handleTagChange = useCallback((rowIndex: number, tag: string) => {
+        if (!currentSheetInfo) return;
+
+        setChangingRow(rowIndex);
+        console.log(`Changed row ${rowIndex} to ${tag}`);
+
+        const nextSheetInfo = produce(currentSheetInfo, draft => {
+            if (!draft.payload) {
+                // Initialize payload if it doesn't exist
+                draft.payload = {
+                    structure: {
+                        statement_type: "",
+                        financial_items_column: 0,
+                        date_columns: [],
+                        groups: [],
+                        validation_results: []
+                    },
+                    tags: []
+                };
+            }
+
+            const existingTagIndex = draft.payload.tags.findIndex((t: SheetTag) => t.row === rowIndex);
+
+            if (existingTagIndex !== -1) {
+                draft.payload.tags[existingTagIndex].tag = tag;
+            } else {
+                draft.payload.tags.push({ row: rowIndex, tag });
+            }
+        });
+
+        mutation.mutate(nextSheetInfo);
+    }, [currentSheetInfo, mutation]);
 
     if (isLoading) {
         return (
@@ -133,6 +185,8 @@ export const SheetInfoPage = () => {
             </Flex>
         );
     }
+
+    console.log('currentSheetInfo', currentSheetInfo);
 
     return (
         <Box style={{ height: 'calc(100vh - 60px)', overflow: 'hidden', display: 'flex', flexDirection: 'row' }}>
@@ -193,9 +247,12 @@ export const SheetInfoPage = () => {
                                                 borderRight: '1px solid var(--gray-5)',
                                             }}>
                                                 {cellIdx === 1 && rowTags[rowIdx + 1] && (
-                                                    <Badge variant="soft" radius="full" color="gray" style={{ marginRight: '8px' }}>
-                                                        {rowTags[rowIdx + 1]}
-                                                    </Badge>
+                                                    <TagCell
+                                                        rowIndex={rowIdx + 1}
+                                                        currentTag={rowTags[rowIdx + 1]}
+                                                        onTagChange={handleTagChange}
+                                                        isPending={mutation.isPending && changingRow === (rowIdx + 1)}
+                                                    />
                                                 )}
                                                 {/* {cellIdx === 1 && rowGroupNames[rowIdx + 1] && (
                                                     <Text size="1" color="gray">

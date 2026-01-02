@@ -1,5 +1,5 @@
 /**
- * Server Models
+ "Server Models
  */
 
 export interface ReportGroup {
@@ -36,7 +36,7 @@ export interface SheetInfoPayload {
 }
 
 /**
- * Database Storage Models
+ "Database Storage Models
  */
 
 export interface UserFile {
@@ -66,3 +66,44 @@ export interface FileDetailResponse {
     sheets: SheetInfo[];
     sheets_data: SheetData[];
 }
+
+export const ontologyTagsIncomeStatement = [
+    "Gross Revenue",
+    "Total Discounts",
+    "Total Cancellation and Returns",
+    "Net Revenue",
+    "Gross Product Cost",
+    "Fulfillment, Shipping, Merchant Fee",
+    "Marketing",
+    "Payroll, Benefits, and Admin",
+    "Other Operating Expenses",
+    "Operating Income",
+    "Non operating income",
+    "Non operating expenses",
+    "Interest",
+    "Depreciation & Amortization",
+    "Pre-Tax Income",
+    "Taxes",
+]
+
+export const ontologyTagsBalanceSheet = [
+    "Cash and bank balances",
+    "Inventory",
+    "Accounts receivable",
+    "Total Current Assets",
+    "Property, Plant, & Equipment",
+    "Accumulated Depreciation & Ammortization",
+    "Other Long Term Assets",
+    "Credit Cards",
+    "Accounts payable",
+    "Short Term Debt (under CL)",
+    "Total Current Liabilities",
+    "Long Term Debt (under LTL)",
+    "Long Term Liabilities ex Debt",
+    "Equity",
+]
+
+export const ontologyTags = [
+    ...ontologyTagsIncomeStatement,
+    ...ontologyTagsBalanceSheet,
+]

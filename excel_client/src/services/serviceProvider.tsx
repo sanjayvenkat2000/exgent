@@ -1,5 +1,5 @@
 import React, { createContext, use } from 'react';
-import type { FileDetailResponse, SheetData, SheetInfo, UserFile } from '../domain/domain'
+import type { SheetData, SheetInfo, SheetInfoPayload, UserFile } from '../domain/domain'
 
 const API_BASE_URL = 'http://localhost:8080';
 
@@ -20,6 +20,19 @@ export class Service {
     async getSheetInfo(fileId: string, sheetIdx: number): Promise<SheetInfo | null> {
         const url = `${API_BASE_URL}/sheetinfo/${fileId}/${sheetIdx}`;
         const response = await fetch(url);
+        return response.json();
+    }
+
+    async updateSheetInfo(fileId: string, sheetIdx: number, sheet_name: string, sheetInfo: SheetInfoPayload): Promise<SheetInfo> {
+        const url = `${API_BASE_URL}/sheetinfo/${fileId}/${sheetIdx}`;
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ sheet_name, payload: sheetInfo }),
+        });
+        if (!response.ok) throw new Error('Failed to update sheet info');
         return response.json();
     }
 
