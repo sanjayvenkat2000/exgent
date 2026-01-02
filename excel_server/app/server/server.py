@@ -166,6 +166,67 @@ def read_root():
     return {"message": "Hello, World!"}
 
 
+@app.get("/files", response_model=List[UserFile])
+def list_files(
+    user_id: str = Depends(get_user_id), store: FileStore = Depends(get_file_store)
+):
+    return store.list_files(user_id)
+
+
+@app.delete("/files/{file_id}", response_model=UserFile)
+def delete_file(
+    file_id: str,
+    user_id: str = Depends(get_user_id),
+    store: FileStore = Depends(get_file_store),
+):
+    try:
+        return store.delete_file(user_id, file_id)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/files/{file_id}", response_model=FileDetailResponse)
+def get_file_details(
+    file_id: str,
+    user_id: str = Depends(get_user_id),
+    f_store: FileStore = Depends(get_file_store),
+    sheet_info_store: SheetInfoStore = Depends(get_sheet_info_store),
+) -> FileDetailResponse:
+    try:
+        # Get file metadata and content
+        user_file, content = f_store.get_file(user_id, file_id)
+
+        sheet_data_list = convert_excel_to_sheet_data(content)
+
+        sheets = []
+        sheets_data: list[SheetData] = []
+        for idx, (name, sheet_data) in enumerate(sheet_data_list):
+            # Get latest extract for this sheet
+            extract = sheet_info_store.get_latest(user_id, file_id, idx)
+            sheets.append(
+                SheetInfo(
+                    user_id=user_id,
+                    file_id=file_id,
+                    sheet_idx=idx,
+                    sheet_name=name,
+                    payload=extract.payload if extract is not None else None,
+                    version=extract.version if extract is not None else 0,
+                )
+            )
+            sheets_data.append(sheet_data)
+
+        return FileDetailResponse(
+            **user_file.model_dump(), sheets=sheets, sheets_data=sheets_data
+        )
+
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/sheets/{file_id}", response_model=list[str])
 def get_sheet_names(
     file_id: str,
@@ -209,63 +270,27 @@ def get_sheet_info_by_index(
     )
 
 
-@app.get("/files/{file_id}", response_model=FileDetailResponse)
-def get_file_details(
+class UpdateSheetInfoRequest(BaseModel):
+    sheet_name: str
+    payload: Optional[SheetInfoPayload] = None
+
+
+@app.post("/sheetinfo/{file_id}/{sheet_idx}", response_model=SheetInfo)
+def update_sheet_info(
     file_id: str,
+    sheet_idx: int,
+    request: UpdateSheetInfoRequest,
     user_id: str = Depends(get_user_id),
-    f_store: FileStore = Depends(get_file_store),
     sheet_info_store: SheetInfoStore = Depends(get_sheet_info_store),
-) -> FileDetailResponse:
+) -> SheetInfo:
     try:
-        # Get file metadata and content
-        user_file, content = f_store.get_file(user_id, file_id)
-
-        sheet_data_list = convert_excel_to_sheet_data(content)
-
-        sheets = []
-        sheets_data: list[SheetData] = []
-        for idx, (name, sheet_data) in enumerate(sheet_data_list):
-            # Get latest extract for this sheet
-            extract = sheet_info_store.get_latest(user_id, file_id, idx)
-            sheets.append(
-                SheetInfo(
-                    user_id=user_id,
-                    file_id=file_id,
-                    sheet_idx=idx,
-                    sheet_name=name,
-                    payload=extract.payload if extract is not None else None,
-                    version=extract.version if extract is not None else 0,
-                )
-            )
-            sheets_data.append(sheet_data)
-
-        return FileDetailResponse(
-            **user_file.model_dump(), sheets=sheets, sheets_data=sheets_data
+        sheet_name = request.sheet_name
+        payload = request.payload
+        return sheet_info_store.add_sheet_info(
+            user_id, file_id, sheet_idx, sheet_name, payload
         )
-
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/files", response_model=List[UserFile])
-def list_files(
-    user_id: str = Depends(get_user_id), store: FileStore = Depends(get_file_store)
-):
-    return store.list_files(user_id)
-
-
-@app.delete("/files/{file_id}", response_model=UserFile)
-def delete_file(
-    file_id: str,
-    user_id: str = Depends(get_user_id),
-    store: FileStore = Depends(get_file_store),
-):
-    try:
-        return store.delete_file(user_id, file_id)
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -285,7 +310,7 @@ def list_to_csv_string(data: list[list[str]]) -> str:
     return output.getvalue()
 
 
-@app.post("/analyze/{file_id}/{sheet_idx}")
+@app.post("/analyze_sheet/{file_id}/{sheet_idx}")
 async def analyze_file_sheet(
     file_id: str,
     sheet_idx: int,
@@ -355,31 +380,6 @@ async def analyze_file_sheet(
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
     # return {"message": "Analysis started", "file_id": file_id, "sheet_idx": sheet_idx}
-
-
-class UpdateSheetInfoRequest(BaseModel):
-    sheet_name: str
-    payload: Optional[SheetInfoPayload] = None
-
-
-@app.post("/update/{file_id}/{sheet_idx}", response_model=SheetInfo)
-def update_sheet_info(
-    file_id: str,
-    sheet_idx: int,
-    request: UpdateSheetInfoRequest,
-    user_id: str = Depends(get_user_id),
-    sheet_info_store: SheetInfoStore = Depends(get_sheet_info_store),
-) -> SheetInfo:
-    try:
-        sheet_name = request.sheet_name
-        payload = request.payload
-        return sheet_info_store.add_sheet_info(
-            user_id, file_id, sheet_idx, sheet_name, payload
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=409, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/upload", response_model=UserFile)
