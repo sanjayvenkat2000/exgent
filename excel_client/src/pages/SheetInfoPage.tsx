@@ -8,15 +8,14 @@ import {
     Table,
     ScrollArea,
     Text,
-    Heading,
-    Button,
     IconButton
 } from '@radix-ui/themes';
-import { ChatBubbleIcon, Cross2Icon } from '@radix-ui/react-icons';
+import { ChatBubbleIcon } from '@radix-ui/react-icons';
 import { TagCell } from '../components/TagCell';
 import { useService } from '../domain/serviceProvider';
-import type { SheetData, SheetInfo, ReportGroup, SheetTag } from '../domain/domain';
+import type { SheetData, SheetInfo, ReportGroup, SheetTag, UserFile } from '../domain/domain';
 import { produce } from 'immer';
+import { ChatComponent } from '../components/ChatComponent';
 
 const rowGroupColorsOrange = ["#FFD19A", "#FFC182", "#F5AE73"];
 const rowGroupColorsBlue = ["#D6EAF8", "#AED6F1", "#85C1E9"];
@@ -27,6 +26,7 @@ export const SheetInfoPage = () => {
     const [isChatOpen, setIsChatOpen] = useState(true);
     const service = useService();
     const queryClient = useQueryClient();
+
     // Get sheet_idx from URL or default to 0
 
     const activeSheetIdx = useMemo(() => {
@@ -41,11 +41,21 @@ export const SheetInfoPage = () => {
     }, [searchParams, sheet_idx]);
 
     // Fetch Sheet Names
-    const { data: sheet_names, isLoading: isLoadingSheets, isError: isErrorSheets } = useQuery<string[]>({
+    const { data: sheet_names } = useQuery<string[]>({
         queryKey: ['sheets', file_id],
         queryFn: async () => {
             if (!file_id) throw new Error('No file ID');
             return service.getSheets(file_id);
+        },
+        enabled: !!file_id
+    });
+
+    // Fetch File Info
+    const { data: fileInfo } = useQuery<UserFile>({
+        queryKey: ['file-info', file_id],
+        queryFn: async () => {
+            if (!file_id) throw new Error('No file ID');
+            return service.getUserFile(file_id);
         },
         enabled: !!file_id
     });
@@ -62,7 +72,7 @@ export const SheetInfoPage = () => {
     });
 
     // Fetch current Sheet Info
-    const { data: currentSheetInfo, isLoading: isLoadingSheetInfo, isError: isErrorSheetInfo } = useQuery<SheetInfo | null>({
+    const { data: currentSheetInfo } = useQuery<SheetInfo | null>({
         queryKey: ['sheetinfo', file_id, activeSheetIdx],
         queryFn: async () => {
             if (!file_id) throw new Error('No file ID');
@@ -107,17 +117,6 @@ export const SheetInfoPage = () => {
         });
         return rowTags;
     }, [currentSheetInfo?.payload?.tags]);
-
-    const rowGroupNames = useMemo(() => {
-        const rowGroupNames: Record<number, string> = {};
-        (currentSheetInfo?.payload?.structure?.groups || []).forEach((g: ReportGroup) => {
-            const idx = g.header_rows[0] ?? g.line_items[0];
-            if (idx) {
-                rowGroupNames[idx] = g.name;
-            }
-        });
-        return rowGroupNames;
-    }, [currentSheetInfo?.payload?.structure?.groups]);
 
     const [changingRow, setChangingRow] = useState<number | null>(null);
 
@@ -202,8 +201,34 @@ export const SheetInfoPage = () => {
             }}>
 
                 <Box style={{ flexShrink: 0, overflowX: 'auto' }}>
+                    <Box px="3" py="3" style={{ borderBottom: '1px solid var(--gray-5)', backgroundColor: 'var(--gray-2)' }}>
+                        <Flex align="center" gap="3">
+                            <Box style={{
+                                width: 28,
+                                height: 28,
+                                backgroundColor: 'var(--green-9)',
+                                borderRadius: 6,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: 'white',
+                                fontWeight: 'bold',
+                                fontSize: 16,
+                            }}>
+                                X
+                            </Box>
+                            <Flex direction="column">
+                                <Text size="3" weight="bold" style={{ lineHeight: '1.2' }}>
+                                    {fileInfo?.original_filename}
+                                </Text>
+                                <Text size="1" color="gray">
+                                    Created on {fileInfo && `${new Date(fileInfo.create_date).toLocaleDateString()} ${new Date(fileInfo.create_date).toLocaleTimeString()}`}
+                                </Text>
+                            </Flex>
+                        </Flex>
+                    </Box>
                     <Tabs.Root value={activeSheetIdx.toString()} onValueChange={handleTabChange} style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                        <Tabs.List style={{ flexWrap: 'nowrap', width: 'fit-content' }}>
+                        <Tabs.List style={{ flexWrap: 'nowrap', width: 'fit-content', paddingLeft: 'var(--space-3)', paddingRight: 'var(--space-3)' }}>
                             {sheet_names?.map((sheet, index) => (
                                 <Tabs.Trigger key={index} value={index.toString()}>
                                     {sheet}
@@ -286,53 +311,12 @@ export const SheetInfoPage = () => {
             </Box >
 
             {/* Right Section: Chat Area */}
-            <Box style={{
-                width: isChatOpen ? '40%' : '0%',
-                display: 'flex',
-                flexDirection: 'column',
-                height: '100%',
-                overflow: 'hidden',
-                transition: 'width 0.3s ease-in-out',
-                opacity: isChatOpen ? 1 : 0,
-                pointerEvents: isChatOpen ? 'auto' : 'none',
-                position: 'relative' // Needed for absolute positioning of close button
-            }}>
-                {/* Close Button */}
-                <Box style={{ position: 'absolute', top: '10px', right: '10px', zIndex: 10 }}>
-                    <IconButton
-                        size="2"
-                        variant="ghost"
-                        color="gray"
-                        onClick={() => setIsChatOpen(false)}
-                    >
-                        <Cross2Icon width="20" height="20" />
-                    </IconButton>
-                </Box>
-
-                <ScrollArea style={{ flexGrow: 1 }}>
-                    <Flex direction="column" align="center" justify="center" style={{ minHeight: '100%', padding: '20px' }}>
-                        {/* Placeholder for Empty Chat State */}
-                        <Flex direction="column" align="center" gap="4">
-                            <Box p="4" style={{ backgroundColor: 'var(--gray-3)', borderRadius: '50%' }}>
-                                <ChatBubbleIcon width="32" height="32" color="var(--gray-11)" />
-                            </Box>
-                            <Heading size="4" align="center" color="gray">Start a conversation</Heading>
-                            <Text align="center" color="gray" style={{ maxWidth: 300 }}>
-                                Ask questions about your data, analyze trends, or extract insights.
-                            </Text>
-                            <Button size="3" variant="soft">
-                                <ChatBubbleIcon /> Start Analysis
-                            </Button>
-                        </Flex>
-                    </Flex>
-                </ScrollArea>
-
-                {/* Chat Input Placeholder */}
-                <Box p="4" style={{ borderTop: '1px solid var(--gray-5)' }}>
-                    {/* Input area will go here */}
-                    <Box style={{ height: 40, backgroundColor: 'var(--gray-3)', borderRadius: 4 }} />
-                </Box>
-            </Box >
+            <ChatComponent
+                isChatOpen={isChatOpen}
+                setIsChatOpen={setIsChatOpen}
+                fileId={file_id}
+                sheetIdx={activeSheetIdx}
+            />
         </Box >
     );
 };

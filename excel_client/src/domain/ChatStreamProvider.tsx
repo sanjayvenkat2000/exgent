@@ -1,6 +1,7 @@
 import { createContext, useCallback, use, useState } from "react";
 import type { ReactNode } from "react";
-import { NewMessage, type Event } from "./googleAdkTypes";
+import { produce } from "immer";
+import { NewMessage, type Event, type CodeExecutionResult } from "./googleAdkTypes";
 import { useQuery } from "@tanstack/react-query";
 import { useService } from "./serviceProvider";
 
@@ -50,6 +51,11 @@ const useChatStreamLogic = (apiUrl: string) => {
     const [sheetIdx, setSheetIdx] = useState<number | null>(null);
     const service = useService();
 
+    const executeUiCode = useCallback((result: CodeExecutionResult) => {
+        console.log("Executing UI code from result:", result);
+        // This is where you would handle the specific instructions
+        // like updating tags, sheet structures, etc.
+    }, []);
 
     const resetChatState = useCallback(() => {
         setSessionId(null);
@@ -76,7 +82,7 @@ const useChatStreamLogic = (apiUrl: string) => {
     })
 
 
-    const setSession = useCallback((fileid: string, sheetIdx: number) => {
+    const setChatSession = useCallback((fileid: string, sheetIdx: number) => {
         const sessionId = `${fileid}_${sheetIdx}`;
         const appName = "excel_tag";
         setMessages([]);
@@ -86,43 +92,45 @@ const useChatStreamLogic = (apiUrl: string) => {
         setSheetIdx(sheetIdx);
     }, [setMessages, setSessionId, setAppName, setFileId, setSheetIdx]);
 
-    console.log('messages', messages);
 
     const onMessage = useCallback((chunk: Event, setState: React.Dispatch<React.SetStateAction<Event[]>>) => {
-        setState((s) => {
-            const newMessages = [...s];
-            if (newMessages.length === 0) {
-                newMessages.push(chunk);
-                return newMessages;
+        // Prepend "LIVE: " to any code execution result output returned in stream.
+        chunk.content?.parts?.forEach(part => {
+            if (part.codeExecutionResult) {
+                executeUiCode(part.codeExecutionResult);
+            } else if (part["code_execution_result"]) {
+                executeUiCode(part["code_execution_result"]);
+            }
+        });
+
+        setState(produce((draft) => {
+            if (draft.length === 0) {
+                draft.push(chunk);
+                return;
             }
 
-            const lastMessage = newMessages[newMessages.length - 1];
+            const lastMessage = draft[draft.length - 1];
             if (lastMessage && lastMessage.partial) {
                 if (chunk.partial) {
-                    const lastMessageText = lastMessage.content?.parts?.[0]?.text;
-                    const currentText = chunk.content?.parts?.[0]?.text;
+                    const lastPart = lastMessage.content?.parts?.[0];
+                    const chunkPart = chunk.content?.parts?.[0];
 
-                    if (lastMessageText !== undefined && currentText !== undefined) {
-                        const newText = lastMessageText + currentText;
-
-                        const updatedMessage = {
-                            ...lastMessage,
-                            content: {
-                                ...lastMessage.content,
-                                parts: [{ text: newText }],
-                            },
-                        };
-                        newMessages[newMessages.length - 1] = updatedMessage;
+                    if (lastPart && chunkPart) {
+                        if (chunkPart.text !== undefined) {
+                            lastPart.text = (lastPart.text || "") + chunkPart.text;
+                        }
+                        if (chunkPart.codeExecutionResult) {
+                            lastPart.codeExecutionResult = chunkPart.codeExecutionResult;
+                        }
                     }
                 } else {
-                    newMessages[newMessages.length - 1] = chunk;
+                    draft[draft.length - 1] = chunk;
                 }
             } else {
-                newMessages.push(chunk);
+                draft.push(chunk);
             }
-            return newMessages;
-        });
-    }, []);
+        }));
+    }, [executeUiCode]);
 
     const sendMessage = useCallback(async (userMessage: string, appName: string = "governor") => {
         if (sessionId === null) {
@@ -140,22 +148,23 @@ const useChatStreamLogic = (apiUrl: string) => {
             "Content-Type": "application/json",
         }
 
-        const agentRunRequest: RunAgentRequest = {
-            appName: appName,
-            userId: "user",
-            sessionId: sessionId,
-            newMessage: {
-                parts: [{ text: userMessage }],
-                role: 'user'
-            },
-            streaming: true,
-        }
-        const urlEndpoint = 'run_sse'
+        // const agentRunRequest: RunAgentRequest = {
+        //     appName: appName,
+        //     userId: "user",
+        //     sessionId: sessionId,
+        //     newMessage: {
+        //         parts: [{ text: userMessage }],
+        //         role: 'user'
+        //     },
+        //     streaming: true,
+        // }
         // const buffer = ''
-        fetch(`${apiUrl}/${urlEndpoint}`, {
+        fetch(`${apiUrl}/sheetchat/${fileId}/${sheetIdx}`, {
             method: "POST",
             headers,
-            body: JSON.stringify(agentRunRequest),
+            body: JSON.stringify({
+                "user_input": userMessage,
+            }),
             // body: JSON.stringify({ 'query': message, 'session_id': sessionId }),
         }).then((response) => {
             if (!response.ok) {
@@ -213,16 +222,21 @@ const useChatStreamLogic = (apiUrl: string) => {
                 setIsStreaming(false);
             });
 
-    }, [apiUrl, onMessage, sessionId])
+    }, [apiUrl, onMessage, sessionId, fileId, sheetIdx])
 
+
+    const clearStreamingErrorMessage = useCallback(() => {
+        setStreamingErrorMessage(null);
+    }, []);
 
     return {
         messages,
         isStreaming,
         streamingErrorMessage,
-        setSession,
+        setChatSession,
         sendMessage,
         resetChatState,    // createNewSession,
+        clearStreamingErrorMessage,
     }
 }
 

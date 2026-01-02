@@ -2,30 +2,34 @@ import React, { createContext, use } from 'react';
 import type { SheetData, SheetInfo, SheetInfoPayload, UserFile } from './domain'
 import type { Event } from './googleAdkTypes';
 
-const API_BASE_URL = 'http://localhost:8080';
-
 
 export class Service {
+    private readonly apiUrl: string;
+
+    constructor(apiUrl: string) {
+        this.apiUrl = apiUrl;
+    }
+
     async getSheets(fileId: string): Promise<string[]> {
-        const url = `${API_BASE_URL}/sheets/${fileId}`;
+        const url = `${this.apiUrl}/sheets/${fileId}`;
         const response = await fetch(url);
         return response.json();
     }
 
     async getSheetData(fileId: string, sheetIdx: number): Promise<SheetData> {
-        const url = `${API_BASE_URL}/sheetdata/${fileId}/${sheetIdx}`;
+        const url = `${this.apiUrl}/sheetdata/${fileId}/${sheetIdx}`;
         const response = await fetch(url);
         return response.json();
     }
 
     async getSheetInfo(fileId: string, sheetIdx: number): Promise<SheetInfo | null> {
-        const url = `${API_BASE_URL}/sheetinfo/${fileId}/${sheetIdx}`;
+        const url = `${this.apiUrl}/sheetinfo/${fileId}/${sheetIdx}`;
         const response = await fetch(url);
         return response.json();
     }
 
     async updateSheetInfo(fileId: string, sheetIdx: number, sheet_name: string, sheetInfo: SheetInfoPayload): Promise<SheetInfo> {
-        const url = `${API_BASE_URL}/sheetinfo/${fileId}/${sheetIdx}`;
+        const url = `${this.apiUrl}/sheetinfo/${fileId}/${sheetIdx}`;
         const response = await fetch(url, {
             method: 'POST',
             headers: {
@@ -38,19 +42,25 @@ export class Service {
     }
 
     async getSheetChatHistory(fileId: string, sheetIdx: number): Promise<Event[]> {
-        const url = `${API_BASE_URL}/sheetchat/history/${fileId}/${sheetIdx}`;
+        const url = `${this.apiUrl}/sheetchat/history/${fileId}/${sheetIdx}`;
+        const response = await fetch(url);
+        return response.json();
+    }
+
+    async getUserFile(fileId: string): Promise<UserFile> {
+        const url = `${this.apiUrl}/files/${fileId}`;
         const response = await fetch(url);
         return response.json();
     }
 
     async listFiles(): Promise<UserFile[]> {
-        const url = `${API_BASE_URL}/files`;
+        const url = `${this.apiUrl}/files`;
         const response = await fetch(url);
         return response.json();
     }
 
     async uploadFile(file: File): Promise<UserFile> {
-        const url = `${API_BASE_URL}/upload`;
+        const url = `${this.apiUrl}/upload`;
         const formData = new FormData();
         formData.append('file', file);
         const response = await fetch(url, {

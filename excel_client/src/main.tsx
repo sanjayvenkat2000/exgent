@@ -10,16 +10,18 @@ import { ChatStreamProvider } from './domain/ChatStreamProvider'
 
 const queryClient = new QueryClient()
 
+const API_BASE_URL = 'http://localhost:8080';
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  // <React.StrictMode>
-  <QueryClientProvider client={queryClient}>
-    <Theme>
-      <ServiceProvider service={new Service()}>
-        <ChatStreamProvider>
-          <App />
-        </ChatStreamProvider>
-      </ServiceProvider>
-    </Theme>
-  </QueryClientProvider>
-  // </React.StrictMode>,
+  <React.StrictMode>
+    <QueryClientProvider client={queryClient}>
+      <Theme>
+        <ServiceProvider service={new Service(API_BASE_URL)}>
+          <ChatStreamProvider apiUrl={API_BASE_URL}>
+            <App />
+          </ChatStreamProvider>
+        </ServiceProvider>
+      </Theme>
+    </QueryClientProvider>
+  </React.StrictMode>,
 )
