@@ -28,6 +28,7 @@ from fastapi.responses import StreamingResponse
 from google.adk.agents.run_config import RunConfig, StreamingMode
 from google.adk.apps.app import App
 from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
+from google.adk.events.event import Event
 from google.adk.memory.in_memory_memory_service import InMemoryMemoryService
 from google.adk.runners import Runner
 from google.adk.sessions.database_session_service import DatabaseSessionService
@@ -283,6 +284,9 @@ def update_sheet_info(
     user_id: str = Depends(get_user_id),
     sheet_info_store: SheetInfoStore = Depends(get_sheet_info_store),
 ) -> SheetInfo:
+    from time import sleep
+
+    sleep(2)
     try:
         sheet_name = request.sheet_name
         payload = request.payload
@@ -310,8 +314,8 @@ def list_to_csv_string(data: list[list[str]]) -> str:
     return output.getvalue()
 
 
-@app.post("/analyze_sheet/{file_id}/{sheet_idx}")
-async def analyze_file_sheet(
+@app.post("/sheetchat/{file_id}/{sheet_idx}")
+async def sheet_chat_stream(
     file_id: str,
     sheet_idx: int,
     user_id: str = Depends(get_user_id),
@@ -380,6 +384,23 @@ async def analyze_file_sheet(
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
     # return {"message": "Analysis started", "file_id": file_id, "sheet_idx": sheet_idx}
+
+
+@app.get("/sheetchat/history/{file_id}/{sheet_idx}")
+async def get_sheet_chat_history(
+    file_id: str,
+    sheet_idx: int,
+    user_id: str = Depends(get_user_id),
+    session_service: DatabaseSessionService = Depends(get_session_service),
+) -> List[Event]:
+    session_id = f"{file_id}_{sheet_idx}"
+    session = await session_service.get_session(
+        app_name="excel_tag", user_id=user_id, session_id=session_id
+    )
+    if session:
+        return session.events
+    else:
+        return []
 
 
 @app.post("/upload", response_model=UserFile)
