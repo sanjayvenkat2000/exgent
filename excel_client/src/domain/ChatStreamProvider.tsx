@@ -1,8 +1,8 @@
 import { createContext, useCallback, use, useState } from "react";
 import type { ReactNode } from "react";
 import { produce } from "immer";
-import { NewMessage, type Event, type CodeExecutionResult } from "./googleAdkTypes";
-import { useQuery } from "@tanstack/react-query";
+import { NewMessage, type Event, type CodeExecutionResult, Outcome } from "./googleAdkTypes";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useService } from "./serviceProvider";
 
 
@@ -50,12 +50,36 @@ const useChatStreamLogic = (apiUrl: string) => {
     const [fileId, setFileId] = useState<string | null>(null);
     const [sheetIdx, setSheetIdx] = useState<number | null>(null);
     const service = useService();
+    const queryClient = useQueryClient();
 
-    const executeUiCode = useCallback((result: CodeExecutionResult) => {
-        console.log("Executing UI code from result:", result);
-        // This is where you would handle the specific instructions
-        // like updating tags, sheet structures, etc.
-    }, []);
+    const sheetInfoMutation = useMutation({
+        mutationFn: async () => {
+            if (!fileId || !sheetIdx) {
+                return Promise.resolve();
+            }
+            return;
+        },
+        onSuccess: () => {
+            if (fileId && sheetIdx !== null) {
+                queryClient.invalidateQueries({
+                    queryKey: ['sheetinfo', fileId, sheetIdx]
+                });
+            }
+        }
+    });
+
+    const handleUiExecution = useCallback((codeExecutionResult: CodeExecutionResult) => {
+
+        // Simple system to tell the UI to refresh when new data is available.
+        // More complex systems like Ag-UI and A2UI should be considered.
+        // We have only one action here, but you can trigger various UI actions in a similar manner
+        // by switching on the content of the code execution result `codeExecutionResult.output`.
+        console.log('codeExecutionResult', codeExecutionResult);
+        if (codeExecutionResult.outcome === Outcome.OUTCOME_OK) {
+            console.log('codeExecutionResult.outcome === Outcome.OUTCOME_OK');
+            sheetInfoMutation.mutate()
+        }
+    }, [sheetInfoMutation]);
 
     const resetChatState = useCallback(() => {
         setSessionId(null);
@@ -94,12 +118,14 @@ const useChatStreamLogic = (apiUrl: string) => {
 
 
     const onMessage = useCallback((chunk: Event, setState: React.Dispatch<React.SetStateAction<Event[]>>) => {
-        // Prepend "LIVE: " to any code execution result output returned in stream.
+
         chunk.content?.parts?.forEach(part => {
             if (part.codeExecutionResult) {
-                executeUiCode(part.codeExecutionResult);
+                handleUiExecution(part.codeExecutionResult);
+                // @ts-expect-error - code_execution_result is a legacy field name from some backend versions
             } else if (part["code_execution_result"]) {
-                executeUiCode(part["code_execution_result"]);
+                // @ts-expect-error - code_execution_result is a legacy field name from some backend versions
+                handleUiExecution(part["code_execution_result"]);
             }
         });
 
@@ -130,9 +156,9 @@ const useChatStreamLogic = (apiUrl: string) => {
                 draft.push(chunk);
             }
         }));
-    }, [executeUiCode]);
+    }, [handleUiExecution]);
 
-    const sendMessage = useCallback(async (userMessage: string, appName: string = "governor") => {
+    const sendMessage = useCallback(async (userMessage: string) => {
         if (sessionId === null) {
             console.error("No session id found. Set session id before sending messages.");
             return;

@@ -28,6 +28,8 @@ export const TagCell = ({ rowIndex, currentTag, onTagChange, isPending }: TagCel
             >
                 <Select.Trigger placeholder="Select tag..." style={{ marginRight: '8px' }} />
                 <Select.Content>
+                    <Select.Item value="Unclear">Unclear</Select.Item>
+                    <Select.Separator className="SelectSeparator" />
                     <Select.Group>
                         <Select.Label className="SelectLabel">Income Statement</Select.Label>
                         {ontologyTagsIncomeStatement.map((tag) => (

@@ -4,8 +4,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Flex, Text, Heading, Button, Card, Table, Box, Container, ScrollArea, Badge, Separator } from '@radix-ui/themes';
 import { useService } from '../domain/serviceProvider';
 
-const API_BASE = 'http://localhost:8080';
-
 interface UserFile {
     file_id: string;
     original_filename: string;

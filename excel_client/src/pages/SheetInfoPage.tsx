@@ -1,31 +1,28 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useSearchParams, useParams } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import {
     Flex,
     Box,
     Tabs,
-    Table,
-    ScrollArea,
     Text,
     IconButton
 } from '@radix-ui/themes';
 import { ChatBubbleIcon } from '@radix-ui/react-icons';
-import { TagCell } from '../components/TagCell';
 import { useService } from '../domain/serviceProvider';
-import type { SheetData, SheetInfo, ReportGroup, SheetTag, UserFile } from '../domain/domain';
-import { produce } from 'immer';
+import type { SheetData, SheetInfo, UserFile } from '../domain/domain';
 import { ChatComponent } from '../components/ChatComponent';
+import { generate_ontology_view } from '../domain/OntologyView';
+import { ExcelView } from '../components/ExcelView';
+import { OntologyViewWidget } from '../components/OntologyViewWidget';
 
-const rowGroupColorsOrange = ["#FFD19A", "#FFC182", "#F5AE73"];
-const rowGroupColorsBlue = ["#D6EAF8", "#AED6F1", "#85C1E9"];
 
 export const SheetInfoPage = () => {
     const { file_id, sheet_idx } = useParams<{ file_id: string; sheet_idx?: string }>();
     const [searchParams, setSearchParams] = useSearchParams();
-    const [isChatOpen, setIsChatOpen] = useState(true);
+    const [isChatOpen, setIsChatOpen] = useState(false);
+    const [viewMode, setViewMode] = useState<'standard' | 'ontology'>('standard');
     const service = useService();
-    const queryClient = useQueryClient();
 
     // Get sheet_idx from URL or default to 0
 
@@ -82,92 +79,16 @@ export const SheetInfoPage = () => {
         enabled: !!file_id && activeSheetIdx !== undefined && activeSheetIdx !== null
     });
 
+    const ontologyViewData = useMemo(() => {
+        if (!currentSheetInfo) return null;
+        return generate_ontology_view(currentSheetData, currentSheetInfo.payload);
+    }, [currentSheetData, currentSheetInfo]);
+
+    console.log('ontologyViewData', ontologyViewData);
+
     const handleTabChange = useCallback((value: string) => {
         setSearchParams({ sheet_idx: value });
     }, [setSearchParams]);
-
-    const rowGroupColors = useMemo(() => {
-        const groups = currentSheetInfo?.payload?.structure?.groups || [];
-        const colorMap: Record<number, string> = {};
-
-        groups.forEach((group: ReportGroup, idx: number) => {
-            const palette = idx % 2 === 0 ? rowGroupColorsOrange : rowGroupColorsBlue;
-
-            // Header: Middle shade
-            group.header_rows.forEach((row: number) => {
-                colorMap[row] = palette[1];
-            });
-
-            // Line items: Lightest shade
-            group.line_items.forEach((row: number) => {
-                colorMap[row] = palette[0];
-            });
-
-            // Total: Darkest shade
-            colorMap[group.total] = palette[2];
-        });
-
-        return colorMap;
-    }, [currentSheetInfo]);
-
-    const rowTags = useMemo(() => {
-        const rowTags: Record<number, string> = {};
-        (currentSheetInfo?.payload?.tags || []).forEach((t: SheetTag) => {
-            rowTags[t.row] = t.tag;
-        });
-        return rowTags;
-    }, [currentSheetInfo?.payload?.tags]);
-
-    const [changingRow, setChangingRow] = useState<number | null>(null);
-
-    const mutation = useMutation({
-        mutationFn: async (newSheetInfo: SheetInfo) => {
-            if (!file_id || activeSheetIdx === undefined || !newSheetInfo.payload) {
-                throw new Error("Missing required data for update");
-            }
-            return service.updateSheetInfo(file_id, activeSheetIdx, newSheetInfo.sheet_name, newSheetInfo.payload);
-        },
-        onSuccess: () => {
-            setChangingRow(null);
-            queryClient.invalidateQueries({ queryKey: ['sheetinfo', file_id, activeSheetIdx] });
-        },
-        onError: () => {
-            setChangingRow(null);
-        }
-    });
-
-    const handleTagChange = useCallback((rowIndex: number, tag: string) => {
-        if (!currentSheetInfo) return;
-
-        setChangingRow(rowIndex);
-        console.log(`Changed row ${rowIndex} to ${tag}`);
-
-        const nextSheetInfo = produce(currentSheetInfo, draft => {
-            if (!draft.payload) {
-                // Initialize payload if it doesn't exist
-                draft.payload = {
-                    structure: {
-                        statement_type: "",
-                        financial_items_column: 0,
-                        date_columns: [],
-                        groups: [],
-                        validation_results: []
-                    },
-                    tags: []
-                };
-            }
-
-            const existingTagIndex = draft.payload.tags.findIndex((t: SheetTag) => t.row === rowIndex);
-
-            if (existingTagIndex !== -1) {
-                draft.payload.tags[existingTagIndex].tag = tag;
-            } else {
-                draft.payload.tags.push({ row: rowIndex, tag });
-            }
-        });
-
-        mutation.mutate(nextSheetInfo);
-    }, [currentSheetInfo, mutation]);
 
     if (isLoading) {
         return (
@@ -225,73 +146,39 @@ export const SheetInfoPage = () => {
                                     Created on {fileInfo && `${new Date(fileInfo.create_date).toLocaleDateString()} ${new Date(fileInfo.create_date).toLocaleTimeString()}`}
                                 </Text>
                             </Flex>
+                            <Box style={{ flexGrow: 1 }} />
+                            {(currentSheetInfo?.payload?.tags?.length ?? 0) > 0 && (
+                                <Tabs.Root value={viewMode} onValueChange={(v) => setViewMode(v as 'standard' | 'ontology')}>
+                                    <Tabs.List>
+                                        <Tabs.Trigger value="standard">Standard</Tabs.Trigger>
+                                        <Tabs.Trigger value="ontology">Ontology</Tabs.Trigger>
+                                    </Tabs.List>
+                                </Tabs.Root>
+                            )}
                         </Flex>
                     </Box>
-                    <Tabs.Root value={activeSheetIdx.toString()} onValueChange={handleTabChange} style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                        <Tabs.List style={{ flexWrap: 'nowrap', width: 'fit-content', paddingLeft: 'var(--space-3)', paddingRight: 'var(--space-3)' }}>
-                            {sheet_names?.map((sheet, index) => (
-                                <Tabs.Trigger key={index} value={index.toString()}>
-                                    {sheet}
-                                </Tabs.Trigger>
-                            ))}
-                        </Tabs.List>
-                    </Tabs.Root>
+                    <Flex justify="between" align="center" pr="3">
+                        <Tabs.Root value={activeSheetIdx.toString()} onValueChange={handleTabChange}>
+                            <Tabs.List style={{ flexWrap: 'nowrap', width: 'fit-content', paddingLeft: 'var(--space-3)' }}>
+                                {sheet_names?.map((sheet, index) => (
+                                    <Tabs.Trigger key={`sheet-tab-${index}`} value={index.toString()}>
+                                        {sheet}
+                                    </Tabs.Trigger>
+                                ))}
+                            </Tabs.List>
+                        </Tabs.Root>
+                    </Flex>
                 </Box>
                 <Box style={{ flexGrow: 1, overflow: 'hidden', position: 'relative' }}>
-                    <ScrollArea style={{ flexGrow: 1, height: '100%' }}>
-                        <Table.Root variant="surface" size="1">
-                            <Table.Header>
-                                <Table.Row style={{ position: 'sticky', top: 0, zIndex: 10 }}>
-                                    {/* Sticky Header Row */}
-                                    {currentSheetData?.data[0]?.map((header, idx) => (
-                                        <Table.ColumnHeaderCell key={idx} style={{
-                                            position: 'sticky',
-                                            top: 0,
-                                            zIndex: 10,
-                                            backgroundColor: 'var(--color-surface)',
-                                            whiteSpace: 'nowrap',
-                                            padding: '2px 4px',
-                                            textAlign: 'center',
-                                            borderRight: '1px solid var(--gray-5)',
-                                        }}>
-                                            {header || `Col ${idx + 1}`}
-                                        </Table.ColumnHeaderCell>
-                                    ))}
-                                </Table.Row>
-                            </Table.Header>
-                            <Table.Body>
-                                {currentSheetData?.data?.slice(1).map((row, rowIdx) => (
-                                    <Table.Row key={rowIdx} style={{ height: '23px', backgroundColor: rowGroupColors[rowIdx + 1] }}>
-                                        {row.map((cell, cellIdx) => (
-                                            <Table.Cell key={cellIdx} style={{
-                                                whiteSpace: 'pre',
-                                                padding: '0px 4px',
-                                                lineHeight: '22px',
-                                                height: '22px',
-                                                verticalAlign: 'middle',
-                                                borderRight: '1px solid var(--gray-5)',
-                                            }}>
-                                                {cellIdx === 1 && rowTags[rowIdx + 1] && (
-                                                    <TagCell
-                                                        rowIndex={rowIdx + 1}
-                                                        currentTag={rowTags[rowIdx + 1]}
-                                                        onTagChange={handleTagChange}
-                                                        isPending={mutation.isPending && changingRow === (rowIdx + 1)}
-                                                    />
-                                                )}
-                                                {/* {cellIdx === 1 && rowGroupNames[rowIdx + 1] && (
-                                                    <Text size="1" color="gray">
-                                                        {rowGroupNames[rowIdx + 1]}
-                                                    </Text>
-                                                )} */}
-                                                {cell}
-                                            </Table.Cell>
-                                        ))}
-                                    </Table.Row>
-                                ))}
-                            </Table.Body>
-                        </Table.Root>
-                    </ScrollArea>
+                    {viewMode === 'standard' ? (
+                        currentSheetData && currentSheetInfo && file_id && activeSheetIdx !== undefined && activeSheetIdx !== null && (
+                            <ExcelView currentSheetData={currentSheetData} currentSheetInfo={currentSheetInfo} file_id={file_id} activeSheetIdx={activeSheetIdx} />
+                        )
+                    ) : (
+                        ontologyViewData && (
+                            <OntologyViewWidget ontologyViewData={ontologyViewData} />
+                        )
+                    )}
                 </Box>
 
                 {/* Floating Chat Toggle Button - Only visible when chat is closed */}

@@ -104,6 +104,8 @@ export const ChatComponent = ({ isChatOpen, setIsChatOpen, fileId, sheetIdx }: C
         return null;
     };
 
+    console.log('messages', messages);
+
     return (
         <Box style={{
             width: isChatOpen ? '40%' : '0%',
