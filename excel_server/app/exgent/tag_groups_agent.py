@@ -175,15 +175,27 @@ class TagAllGroupsAgent(BaseAgent):
                     content=Content(
                         parts=[
                             Part(
+                                text=f"**Task** - {group.name} tagged.",
                                 code_execution_result=CodeExecutionResult(
                                     output="UI update required. New Sheet Info results are available.",
                                     outcome=Outcome.OUTCOME_OK,
-                                )
+                                ),
                             ),
                         ],
                         role="assistant",
                     ),
                 )
+
+        yield Event(
+            author="tag_all_groups_agent",
+            content=Content(
+                parts=[
+                    Part(text="**All groups tagged***"),
+                ],
+                role="assistant",
+            ),
+            turn_complete=True,
+        )
 
 
 tag_all_groups_agent = TagAllGroupsAgent(input_key="sheet_structure_json")

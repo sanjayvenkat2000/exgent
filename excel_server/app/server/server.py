@@ -13,7 +13,7 @@ from app.domain import (
     SheetInfoPayload,
     UserFile,
 )
-from app.exgent.agent import excel_tag_agent
+from app.exgent.agent import router_agent
 from app.file_store.file_store import FileStore, LocalFileStoreBackend
 from app.server.excel_utils import (
     convert_excel_to_sheet_data,
@@ -96,7 +96,7 @@ async def lifespan(app: FastAPI):
     # This replicates the 'if isinstance(agent_or_app, BaseAgent):' block
     agentic_app = App(
         name="excel_tag",
-        root_agent=excel_tag_agent,
+        root_agent=router_agent,
         plugins=[],  # You can add any necessary plugins here
     )
 
@@ -323,10 +323,15 @@ def list_to_csv_string(data: list[list[str]]) -> str:
     return output.getvalue()
 
 
+class ChatRequest(BaseModel):
+    user_input: str
+
+
 @app.post("/sheetchat/{file_id}/{sheet_idx}")
 async def sheet_chat_stream(
     file_id: str,
     sheet_idx: int,
+    request: ChatRequest,
     user_id: str = Depends(get_user_id),
     f_store: FileStore = Depends(get_file_store),
     sheet_info_store: SheetInfoStore = Depends(get_sheet_info_store),
@@ -347,6 +352,8 @@ async def sheet_chat_stream(
     # Convert the sheet data to a csv string
     excel_file_data = list_to_csv_string(sheet_data.data)
 
+    user_input = request.user_input
+
     session = await session_service.get_session(
         app_name="excel_tag", user_id=user_id, session_id=session_id
     )
@@ -363,7 +370,7 @@ async def sheet_chat_stream(
                 runner.run_async(
                     user_id=user_id,
                     session_id=session_id,
-                    new_message=Content(parts=[Part(text="")], role="user"),
+                    new_message=Content(parts=[Part(text=user_input)], role="user"),
                     state_delta={
                         "excel_file_data": excel_file_data,
                     },

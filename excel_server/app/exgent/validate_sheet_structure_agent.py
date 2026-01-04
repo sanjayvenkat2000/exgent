@@ -102,7 +102,7 @@ class ValidateSheetStructureAgent(LlmAgent):
             author="tag_ontology_agent",
             content=Content(
                 parts=[
-                    Part(text="Validation results saved"),
+                    Part(text="**Task** - Sheet structure detected and validated."),
                     Part(
                         code_execution_result=CodeExecutionResult(
                             output="UI update required. New sheet information is available.",
