@@ -17,24 +17,24 @@ const JsonAccordion = ({ data }: { data: unknown }) => {
     const [isOpen, setIsOpen] = useState(false);
 
     return (
-        <Card style={{ width: '100%', marginTop: '8px', marginBottom: '8px' }}>
+        <Box style={{ border: '1px solid var(--gray-5)', borderRadius: '8px' }}>
             <Flex
                 align="center"
                 justify="between"
                 onClick={() => setIsOpen(!isOpen)}
                 style={{ cursor: 'pointer', padding: '8px' }}
             >
-                <Text weight="bold">...json</Text>
-                {isOpen ? <ChevronDownIcon /> : <ChevronRightIcon />}
+                <Text size='2' color="gray">json configuration...</Text>
+                {isOpen ? <ChevronDownIcon width="16" height="16" color="var(--gray-11)" /> : <ChevronRightIcon width="16" height="16" color="var(--gray-11)" />}
             </Flex>
             {isOpen && (
-                <Box p="2" style={{ backgroundColor: 'var(--gray-2)', overflowX: 'auto' }}>
+                <Box p="2" style={{ backgroundColor: 'var(--gray-2)', overflow: 'auto', maxHeight: '300px', }}>
                     <pre style={{ margin: 0, fontSize: '12px' }}>
                         {JSON.stringify(data, null, 2)}
                     </pre>
                 </Box>
             )}
-        </Card>
+        </Box>
     );
 };
 
@@ -45,8 +45,10 @@ export const ChatComponent = ({ isChatOpen, setIsChatOpen, fileId, sheetIdx }: C
 
     const { setChatSession, messages, sendMessage, isStreaming, streamingErrorMessage, clearStreamingErrorMessage } = useChatStream();
 
+    console.log("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!", fileId, sheetIdx);
+
     useMemo(() => {
-        if (fileId && sheetIdx) {
+        if (fileId && sheetIdx !== undefined && sheetIdx !== null) {
             setChatSession(fileId, sheetIdx);
         }
     }, [fileId, sheetIdx, setChatSession]);
@@ -75,8 +77,8 @@ export const ChatComponent = ({ isChatOpen, setIsChatOpen, fileId, sheetIdx }: C
         }
     };
 
-    const renderPart = (part: Part, index: number, role: string) => {
-        if (part.text !== undefined) {
+    const renderPart = (part: Part, index: number, isUser: boolean) => {
+        if (part.text !== undefined && part.text !== null && part.text !== '') {
             let parsedJson = null;
             try {
                 // simple heuristic to avoid parsing simple text as JSON (e.g. "123" or "true")
@@ -91,18 +93,33 @@ export const ChatComponent = ({ isChatOpen, setIsChatOpen, fileId, sheetIdx }: C
                 return <JsonAccordion key={index} data={parsedJson} />;
             }
 
-            if (role === 'user') {
-                return <Text key={index} style={{ fontSize: '13px' }}>{part.text ? part.text : 'Primary Objective'}</Text>;
+            if (isUser && part.text !== undefined && part.text !== null && part.text !== '') {
+                return <Text key={index} style={{ fontSize: '13px' }}>{part.text}</Text>;
             } else {
-                return (
-                    <Box key={index} className="markdown-content">
-                        <Markdown>{part.text}</Markdown>
-                    </Box>
-                );
+                if (part.text !== undefined && part.text !== null && part.text !== '') {
+                    return (
+                        <Box key={index} className="markdown-content">
+                            <Markdown>{part.text}</Markdown>
+                        </Box>
+                    );
+                }
+                return <></>
             }
+        } else if (
+            part.functionCall !== undefined &&
+            part.functionCall !== null &&
+            part.functionCall?.name === 'transfer_to_agent' &&
+            part.functionCall?.args?.agent_name !== undefined &&
+            part.functionCall?.args?.agent_name !== null &&
+            part.functionCall?.args?.agent_name !== ''
+        ) {
+            const agentName = part.functionCall?.args?.agent_name as string;
+            return <Flex key={index} direction="column" align="start" justify="start" style={{ width: '100%' }}>
+                <Text key={index} style={{ fontSize: '13px' }}>Transfer to agent {agentName}</Text>
+            </Flex>;
         }
-        return null;
-    };
+        return <></>;
+    }
 
     console.log('messages', messages);
 
@@ -192,7 +209,7 @@ export const ChatComponent = ({ isChatOpen, setIsChatOpen, fileId, sheetIdx }: C
                         </Flex>
                     )}
                     {messages && messages.map((message, msgIndex) => {
-                        const role = message.content?.role || 'model'; // Default to model if undefined
+                        const role = message.author || 'user'; // Default to model if undefined
                         const isUser = role === 'user';
 
                         return (
@@ -213,7 +230,7 @@ export const ChatComponent = ({ isChatOpen, setIsChatOpen, fileId, sheetIdx }: C
                                         borderBottomLeftRadius: isUser ? '12px' : '2px',
                                     }}
                                 >
-                                    {message.content?.parts?.map((part, partIndex) => renderPart(part, partIndex, role))}
+                                    {message.content?.parts?.map((part, partIndex) => renderPart(part, partIndex, isUser))}
                                 </Box>
                             </Flex>
                         );

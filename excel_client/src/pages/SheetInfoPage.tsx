@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -15,6 +15,7 @@ import { ChatComponent } from '../components/ChatComponent';
 import { generate_ontology_view } from '../domain/OntologyView';
 import { ExcelView } from '../components/ExcelView';
 import { OntologyViewWidget } from '../components/OntologyViewWidget';
+import { useChatStream } from '../domain/ChatStreamProvider';
 
 
 export const SheetInfoPage = () => {
@@ -23,6 +24,8 @@ export const SheetInfoPage = () => {
     const [isChatOpen, setIsChatOpen] = useState(false);
     const [viewMode, setViewMode] = useState<'standard' | 'ontology'>('standard');
     const service = useService();
+
+    const { setChatSession } = useChatStream();
 
     // Get sheet_idx from URL or default to 0
 
@@ -36,6 +39,12 @@ export const SheetInfoPage = () => {
         }
         return 0;
     }, [searchParams, sheet_idx]);
+
+    useMemo(() => {
+        if (file_id && activeSheetIdx !== undefined && activeSheetIdx !== null) {
+            setChatSession(file_id, activeSheetIdx);
+        }
+    }, [file_id, activeSheetIdx, setChatSession]);
 
     // Fetch Sheet Names
     const { data: sheet_names } = useQuery<string[]>({
@@ -85,6 +94,8 @@ export const SheetInfoPage = () => {
     }, [currentSheetData, currentSheetInfo]);
 
     console.log('ontologyViewData', ontologyViewData);
+    console.log('fileId', file_id);
+    console.log('activeSheetIdx', activeSheetIdx);
 
     const handleTabChange = useCallback((value: string) => {
         setSearchParams({ sheet_idx: value });

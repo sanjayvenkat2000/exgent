@@ -51,7 +51,7 @@ export const RowGroupDisplay = ({ group, validationResults, columnHeaders }: Row
                         {group.name} - Total row {group.total}
                     </Heading>
                     <Text size="2" color="gray" mb="2" as="div">
-                        Date Column: {validationResults.length}
+                        # of Date Columns: {validationResults.length}
                     </Text>
                     <Flex gap="3" align="center">
                         <Badge

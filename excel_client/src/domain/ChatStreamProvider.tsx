@@ -2,7 +2,7 @@ import { createContext, useCallback, use, useState } from "react";
 import type { ReactNode } from "react";
 import { produce } from "immer";
 import { NewMessage, type Event, type CodeExecutionResult, Outcome } from "./googleAdkTypes";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useService } from "./serviceProvider";
 
 
@@ -41,7 +41,6 @@ export interface SessionState {
 
 // Rename the original hook to avoid naming conflicts
 const useChatStreamLogic = (apiUrl: string) => {
-    const [appName, setAppName] = useState<string | null>(null);
     const [sessionId, setSessionId] = useState<string | null>(null);
     const [messages, setMessages] = useState<Event[]>([]);
     const [isStreaming, setIsStreaming] = useState(false);
@@ -49,6 +48,7 @@ const useChatStreamLogic = (apiUrl: string) => {
 
     const [fileId, setFileId] = useState<string | null>(null);
     const [sheetIdx, setSheetIdx] = useState<number | null>(null);
+
     const service = useService();
     const queryClient = useQueryClient();
 
@@ -86,35 +86,31 @@ const useChatStreamLogic = (apiUrl: string) => {
         setMessages([]);
         setIsStreaming(false);
         setStreamingErrorMessage(null);
-        setAppName(null);
-    }, [setAppName, setSessionId, setMessages, setIsStreaming, setStreamingErrorMessage])
-
-    //Load the chat history
-    useQuery({
-        queryKey: ['sessionMessages', sessionId, appName],
-        queryFn: async (): Promise<Event[]> => {
-            if (!fileId || !sheetIdx) {
-                return Promise.resolve([]);
-            }
-            return service.getSheetChatHistory(fileId, sheetIdx)
-                .then(data => {
-                    setMessages(data || []);
-                    return data;
-                });
-        },
-        enabled: !!fileId && !!sheetIdx,
-    })
+    }, [setSessionId, setMessages, setIsStreaming, setStreamingErrorMessage])
 
 
-    const setChatSession = useCallback((fileid: string, sheetIdx: number) => {
+    const setChatSession = useCallback(async (fileid: string, sheetIdx: number) => {
         const sessionId = `${fileid}_${sheetIdx}`;
-        const appName = "excel_tag";
-        setMessages([]);
+
         setSessionId(sessionId);
-        setAppName(appName);
         setFileId(fileid);
         setSheetIdx(sheetIdx);
-    }, [setMessages, setSessionId, setAppName, setFileId, setSheetIdx]);
+
+        // Clear messages to show loading state or reset
+        setMessages([]);
+
+        // Fetch history and set messages
+        try {
+            const data = await queryClient.fetchQuery({
+                queryKey: ['sessionMessages', fileid, sheetIdx],
+                queryFn: () => service.getSheetChatHistory(fileid, sheetIdx),
+            });
+            setMessages(data || []);
+        } catch (error) {
+            console.error("Failed to fetch chat history:", error);
+            setMessages([]);
+        }
+    }, [service, queryClient, setMessages, setSessionId, setFileId, setSheetIdx]);
 
 
     const onMessage = useCallback((chunk: Event, setState: React.Dispatch<React.SetStateAction<Event[]>>) => {

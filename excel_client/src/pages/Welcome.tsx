@@ -56,12 +56,13 @@ export const Welcome = () => {
                 <Box flexGrow="1" p="4">
                     <Heading size="8" mb="4" style={{ color: 'var(--accent-9)' }}>Welcome to Exgent</Heading>
                     <Text size="4" as="p" mb="4" color="gray">
-                        Your professional AI agent designed to handle very large Excel files with ease.
-                        Upload your spreadsheets and let Exgent analyze, extract, and assist you with your data.
+                        Your professional AI agent designed to handle <b>very large Excel files</b> with ease. <br />
+                        Exgent's <b>Primary Objective</b> is to tag the data into your internal ontology.
+                        You can also <b>converse</b> with Exgent about information in the files.
                     </Text>
                     <Flex gap="3" mt="6">
                         <Badge color="blue" size="2">Large File Support</Badge>
-                        <Badge color="green" size="2">Smart Analysis</Badge>
+                        <Badge color="green" size="2">Internal Ontology Tagging</Badge>
                         <Badge color="orange" size="2">Instant Insights</Badge>
                     </Flex>
                 </Box>
@@ -152,6 +153,6 @@ export const Welcome = () => {
                     </ScrollArea>
                 </Card>
             </Box>
-        </Container>
+        </Container >
     );
 };
